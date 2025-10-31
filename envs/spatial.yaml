@@ -1,0 +1,17 @@
+name: pipex_spatial
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.9
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - matplotlib
+  - seaborn
+  - squidpy
+  - scanpy
+  - anndata
+  - networkx

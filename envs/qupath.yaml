@@ -1,0 +1,14 @@
+name: pipex_qupath
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - numpy
+  - pandas
+  - geojson
+  - shapely
+  - matplotlib
+  - pip
+  - pip:
+    - geobuf==1.1.1

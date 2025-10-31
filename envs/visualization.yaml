@@ -1,0 +1,15 @@
+name: pipex_visualization
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - matplotlib
+  - seaborn
+  - plotly
+  - bokeh
+  - numpy
+  - pandas
+  - scikit-learn
+  - networkx
+  - pillow

@@ -1,0 +1,103 @@
+flowchart TD
+    %% Input Data
+    A[📁 Input Channel TIFs<br/>23 channels: DAPI, CD45, CD3E, Ki67, etc.] --> B[🔬 segmentation]
+    A1[⚙️ config.yaml] --> B
+    A2[📋 cell_types.csv] --> D
+    
+    %% Core Pipeline Rules
+    B[🔬 segmentation<br/>StarDist + Membrane Refinement<br/>📦 envs/segmentation.yaml] --> B1[segmentation_mask.npy]
+    B --> B2[nuclei_mask.npy]
+    B --> B3[measurements.csv]
+    B --> B4[segmentation_qc/]
+    
+    B1 --> C[📊 analysis]
+    B3 --> C
+    A --> C
+    C[📊 analysis<br/>Single-cell Analysis & Clustering<br/>📦 envs/analysis.yaml] --> C1[analysis.csv]
+    C --> C2[clusters_leiden.csv]
+    C --> C3[clusters_kmeans.csv]
+    C --> C4[interactions.csv]
+    C --> C5[umap_coordinates.csv]
+    
+    C1 --> D[🏷️ cell_typing]
+    C2 --> D
+    D[🏷️ cell_typing<br/>Cell Type Refinement<br/>📦 envs/analysis.yaml] --> D1[clusters_refined.csv]
+    D --> D2[cell_typing_report.json]
+    
+    %% Parallel Analysis Branches
+    C1 --> E[📈 visualizations]
+    D1 --> E
+    C5 --> E
+    C4 --> E
+    E[📈 visualizations<br/>Generate Plots & Charts<br/>📦 envs/visualization.yaml] --> E1[umap_plot.png]
+    E --> E2[markers_heatmap.png]
+    E --> E3[interaction_network.png]
+    E --> E4[spatial_distribution.png]
+    
+    B1 --> F[🗺️ qupath_export]
+    D1 --> F
+    C1 --> F
+    F[🗺️ qupath_export<br/>QuPath Integration<br/>📦 envs/qupath.yaml] --> F1[qupath_annotations.geojson]
+    F --> F2[qupath_measurements.txt]
+    
+    C1 --> G[📍 spatial_analysis]
+    D1 --> G
+    B1 --> G
+    G[📍 spatial_analysis<br/>Neighborhood Analysis<br/>📦 envs/spatial.yaml] --> G1[spatial_statistics.csv]
+    G --> G2[neighborhood_analysis.csv]
+    G --> G3[spatial_plots/]
+    
+    A --> H[✅ quality_control]
+    B1 --> H
+    C1 --> H
+    H[✅ quality_control<br/>QC Checks & Validation<br/>📦 envs/visualization.yaml] --> H1[quality_control_report.html]
+    H --> H2[qc_plots/]
+    
+    %% Final Outputs
+    C1 --> I[📄 generate_report]
+    D1 --> I
+    C4 --> I
+    G1 --> I
+    E1 --> I
+    E2 --> I
+    E3 --> I
+    E4 --> I
+    I[📄 generate_report<br/>Comprehensive HTML Report<br/>📦 envs/visualization.yaml] --> I1[analysis_report.html]
+    I --> I2[summary_statistics.json]
+    
+    C1 --> J[💾 export_data]
+    D1 --> J
+    G1 --> J
+    C4 --> J
+    J[💾 export_data<br/>Export for Downstream Tools<br/>📦 envs/analysis.yaml] --> J1[celldive_data.h5ad]
+    J --> J2[celldive_data.fcs]
+    J --> J3[combined_analysis.csv]
+    
+    %% Target Rule (all)
+    B1 --> K[🎯 all]
+    B2 --> K
+    C1 --> K
+    C2 --> K
+    C4 --> K
+    E1 --> K
+    E2 --> K
+    F1 --> K
+    I1 --> K
+    K[🎯 all<br/>Final Target Rule]
+    
+    %% Utility Rules
+    L[🧹 clean<br/>Remove temp files]
+    M[🗑️ clean_all<br/>Remove all outputs]
+    
+    %% Styling
+    classDef inputFiles fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef coreRules fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef outputFiles fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef utilityRules fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef targetRule fill:#ffebee,stroke:#b71c1c,stroke-width:3px
+    
+    class A,A1,A2 inputFiles
+    class B,C,D,E,F,G,H,I,J coreRules
+    class B1,B2,B3,B4,C1,C2,C3,C4,C5,D1,D2,E1,E2,E3,E4,F1,F2,G1,G2,G3,H1,H2,I1,I2,J1,J2,J3 outputFiles
+    class L,M utilityRules
+    class K targetRule

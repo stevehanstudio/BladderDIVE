@@ -1,0 +1,19 @@
+name: pipex_segmentation
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.9
+  - numpy<2
+  - scipy
+  - scikit-image
+  - tifffile
+  - opencv
+  - matplotlib
+  - pandas
+  - diplib
+  - tensorflow
+  - pip
+  - pip:
+    - stardist

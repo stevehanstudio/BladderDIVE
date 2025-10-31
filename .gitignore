@@ -1,0 +1,315 @@
+# BladderDIVE Project .gitignore
+
+# =============================================================================
+# LARGE DATA FILES - Microscopy Images & Analysis Outputs
+# =============================================================================
+
+# Raw microscopy images (very large files)
+*.tif
+*.tiff
+*.svs
+*.ndpi
+*.czi
+*.lsm
+*.oib
+*.vsi
+
+# CellDIVE specific files
+*.aivia.tif
+CellDIVE_*.tif
+
+# Aperio/PathCore files
+*.xml
+*.svs
+
+# =============================================================================
+# ANALYSIS OUTPUTS & INTERMEDIATE FILES
+# =============================================================================
+
+# PIPEX pipeline outputs
+input/
+output/
+results/
+analysis/
+segmentation_mask.npy
+nuclei_mask.npy
+*.npy
+*.npz
+
+# Analysis results
+measurements.csv
+analysis.csv
+clusters_*.csv
+interactions.csv
+umap_coordinates.csv
+spatial_statistics.csv
+neighborhood_analysis.csv
+combined_analysis.csv
+
+# Reports and visualizations
+*.html
+analysis_report.html
+quality_control_report.html
+summary_statistics.json
+cell_typing_report.json
+
+# Plot outputs
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.svg
+umap_plot.png
+markers_heatmap.png
+interaction_network.png
+spatial_distribution.png
+
+# Directories with outputs
+segmentation_qc/
+qc_plots/
+spatial_plots/
+plots/
+figures/
+
+# =============================================================================
+# BIOINFORMATICS & DATA SCIENCE FILES
+# =============================================================================
+
+# Single-cell analysis formats
+*.h5ad
+*.h5
+*.fcs
+*.loom
+
+# QuPath files
+*.qpdata/
+*.qpproj
+qupath_annotations.geojson
+qupath_measurements.txt
+
+# Fiji/ImageJ files
+fiji_rois/
+*.roi
+*.zip
+*.ijm
+
+# R/RStudio files
+.Rhistory
+.Rapp.history
+.RData
+.Ruserdata
+*.Rproj
+.Rproj.user/
+
+# =============================================================================
+# PYTHON & CONDA ENVIRONMENT FILES
+# =============================================================================
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Conda environments (if created locally)
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.conda/
+.env
+
+# =============================================================================
+# SNAKEMAKE WORKFLOW FILES
+# =============================================================================
+
+# Snakemake
+.snakemake/
+.snakemake.lock
+*.smk.log
+logs/
+benchmarks/
+temp/
+tmp/
+
+# Conda environment caches
+.conda-env/
+
+# =============================================================================
+# SYSTEM & EDITOR FILES
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.tmp
+*.temp
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =============================================================================
+# IDE & EDITOR FILES
+# =============================================================================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# =============================================================================
+# CONFIGURATION & SECRETS
+# =============================================================================
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Configuration files with sensitive data
+config_local.yaml
+secrets.yaml
+*.key
+*.pem
+
+# =============================================================================
+# TEMPORARY & CACHE FILES
+# =============================================================================
+
+# General temporary files
+*.log
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+*.tmp
+*.temp
+*~
+
+# Cache directories
+.cache/
+cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# =============================================================================
+# DOCUMENTATION BUILD FILES
+# =============================================================================
+
+# Sphinx documentation
+docs/_build/
+docs/build/
+.readthedocs.yml
+
+# MkDocs
+site/
+
+# =============================================================================
+# CUSTOM PROJECT EXCLUSIONS
+# =============================================================================
+
+# Large reference datasets (keep small test datasets)
+reference_data/
+large_datasets/
+
+# Personal notes and scratch files
+notes.txt
+scratch/
+todo.txt
+personal_notes/
+
+# Backup directories
+backup/
+old/
+archive/
+
+# Test outputs (keep test scripts)
+test_output/
+test_results/

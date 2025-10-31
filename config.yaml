@@ -1,0 +1,40 @@
+# Snakemake configuration for CellDIVE PIPEX analysis
+# Adjust these parameters based on your specific dataset and analysis needs
+
+# Project information
+project_name: "CellDIVE_Bladder_Analysis"
+sample_id: "SLIDE-045_R0"
+
+# Segmentation parameters
+nuclei_diameter: 20          # Approximate nucleus size in pixels
+nuclei_expansion: 10         # Cell boundary expansion from nucleus (pixels)
+membrane_diameter: 30        # Membrane marker detection size
+membrane_compactness: 0.5    # Cell shape constraint (0-1, higher = more square)
+
+# Analysis parameters
+log_norm: "yes"              # Apply log normalization
+z_norm: "yes"                # Apply z-score normalization
+custom_filter: "no"          # Apply Cell Profiling lab filters
+
+# Clustering parameters
+leiden_resolution: 0.5       # Leiden clustering resolution
+kmeans_clusters: 15          # Number of k-means clusters
+
+# Visualization parameters
+umap_n_neighbors: 15         # UMAP neighbors parameter
+umap_min_dist: 0.1          # UMAP minimum distance
+
+# Quality control thresholds
+min_cell_area: 50           # Minimum cell area (pixels)
+max_cell_area: 5000         # Maximum cell area (pixels)
+min_nucleus_area: 20        # Minimum nucleus area (pixels)
+
+# Spatial analysis parameters
+interaction_radius: 50      # Cell-cell interaction radius (pixels)
+neighborhood_size: 100      # Neighborhood analysis radius (pixels)
+
+# Output options
+generate_plots: true
+export_qupath: true
+export_anndata: true
+export_fcs: true

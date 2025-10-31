@@ -1,0 +1,21 @@
+name: pipex_analysis
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.9
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - scanpy
+  - anndata
+  - umap-learn
+  - matplotlib
+  - seaborn
+  - squidpy
+  - leidenalg
+  - pip
+  - pip:
+    - qnorm==0.8.1
