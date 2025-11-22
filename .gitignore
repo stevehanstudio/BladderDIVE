@@ -257,6 +257,11 @@ secrets.yaml
 *.key
 *.pem
 
+# JupyterHub files (contain session data and secrets)
+jupyterhub.sqlite
+jupyterhub_cookie_secret
+jupyterhub_config.py
+
 # =============================================================================
 # TEMPORARY & CACHE FILES
 # =============================================================================
