@@ -9,8 +9,9 @@ from pathlib import Path
 configfile: "config.yaml"
 
 # Define paths
+# Use current working directory (where snakemake is run from)
+WORK_DIR = str(Path.cwd())
 PIPEX_DIR = "/mnt/data/Projects/HeLab/pipex"
-WORK_DIR = "/home/steve/Projects/HeLab/BladderDIVE"
 INPUT_DIR = f"{WORK_DIR}/input"
 OUTPUT_DIR = f"{WORK_DIR}/output"
 RESULTS_DIR = f"{WORK_DIR}/results"
