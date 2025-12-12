@@ -16,6 +16,10 @@ INPUT_DIR = f"{WORK_DIR}/input"
 OUTPUT_DIR = f"{WORK_DIR}/output"
 RESULTS_DIR = f"{WORK_DIR}/results"
 
+# Print paths for debugging
+print(f"WORK_DIR: {WORK_DIR}")
+print(f"INPUT_DIR: {INPUT_DIR}")
+
 # Channel list for your CellDIVE data
 CHANNELS = [
     "DAPI", "CD45", "CD3E", "Ki67", "CD8a", "VIM", "CD68", "HLADR",
@@ -49,9 +53,7 @@ rule all:
 # Note: Measuring all 23 channels (23 x 9GB TIFs) causes OOM, so we measure only key markers
 rule segmentation:
     input:
-        channels = expand(f"{INPUT_DIR}/{{channel}}.tif", channel=CHANNELS),
-        dapi = f"{INPUT_DIR}/DAPI.tif",
-        membrane = f"{INPUT_DIR}/PANCK.tif"
+        channels = expand(f"{INPUT_DIR}/{{channel}}.tif", channel=CHANNELS)
     output:
         mask = f"{INPUT_DIR}/analysis/segmentation_data.npy",
         measurements = f"{INPUT_DIR}/analysis/cell_data.csv",
