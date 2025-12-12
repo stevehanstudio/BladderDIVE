@@ -5,6 +5,9 @@
 project_name: "CellDIVE_Bladder_Analysis"
 sample_id: "SLIDE-045_R0"
 
+# Data paths (optional - leave empty if files already in input/)
+source_data_dir: ""  # Path to directory containing source TIF files (e.g., "/path/to/raw/data")
+
 # Segmentation parameters
 nuclei_diameter: 20          # Approximate nucleus size in pixels
 nuclei_expansion: 10         # Cell boundary expansion from nucleus (pixels)

@@ -9,14 +9,17 @@ import shutil
 from pathlib import Path
 import subprocess
 import sys
+import argparse
 
-def setup_pipex_environment():
+def setup_pipex_environment(pipex_dir=None):
     """Install PIPEX dependencies in current environment"""
     
     print("Setting up PIPEX environment...")
     
     # Install PIPEX requirements
-    requirements_file = "/mnt/data/Projects/HeLab/pipex/requirements.txt"
+    if pipex_dir is None:
+        pipex_dir = os.environ.get("PIPEX_DIR", "/mnt/data/Projects/HeLab/pipex")
+    requirements_file = Path(pipex_dir) / "requirements.txt"
     
     if Path(requirements_file).exists():
         print("Installing PIPEX requirements...")
@@ -31,36 +34,54 @@ def setup_pipex_environment():
     else:
         print("❌ Requirements file not found")
 
-def create_pipex_data_structure():
+def create_pipex_data_structure(output_dir=None):
     """Create the required directory structure for PIPEX"""
     
-    # PIPEX expects a specific directory structure
-    pipex_data_dir = Path("/mnt/data/Projects/HeLab/bladder_proteomics_data/pipex_analysis")
+    # Use current working directory or specified output directory
+    if output_dir is None:
+        # Default to current directory's input folder (for Snakemake compatibility)
+        output_dir = Path.cwd() / "input"
+    else:
+        output_dir = Path(output_dir)
     
-    # Create main directories
-    directories = [
-        pipex_data_dir,
-        pipex_data_dir / "input",
-        pipex_data_dir / "output", 
-        pipex_data_dir / "masks",
-        pipex_data_dir / "analysis"
-    ]
+    pipex_data_dir = output_dir
     
-    for directory in directories:
-        directory.mkdir(parents=True, exist_ok=True)
-        print(f"Created: {directory}")
+    # Create the directory (will be used as input directory for extracted TIFs)
+    pipex_data_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Created: {pipex_data_dir}")
     
     return pipex_data_dir
 
-def prepare_celldive_for_pipex():
+def prepare_celldive_for_pipex(source_file=None, output_dir=None):
     """Prepare CellDIVE data in PIPEX-expected format"""
     
     print("\nPreparing CellDIVE data for PIPEX...")
     
-    # PIPEX expects individual channel files in a specific naming convention
-    source_file = "/mnt/data/Projects/HeLab/bladder_proteomics_data/CellDIVE_SLIDE-045_R0.aivia.tif"
-    pipex_data_dir = create_pipex_data_structure()
-    input_dir = pipex_data_dir / "input"
+    # Use provided source file or look for common locations
+    if source_file is None:
+        # Try common locations
+        possible_locations = [
+            Path.cwd() / "CellDIVE_SLIDE-045_R0.aivia.tif",
+            Path.cwd().parent / "CellDIVE_SLIDE-045_R0.aivia.tif",
+            Path("/mnt/data/Projects/HeLab/bladder_proteomics_data/CellDIVE_SLIDE-045_R0.aivia.tif"),
+        ]
+        for loc in possible_locations:
+            if loc.exists():
+                source_file = str(loc)
+                break
+        else:
+            raise FileNotFoundError(
+                "Source AIVIA file not found. Please specify with --source_file.\n"
+                "Tried: " + ", ".join(str(p) for p in possible_locations)
+            )
+    
+    source_file = Path(source_file)
+    if not source_file.exists():
+        raise FileNotFoundError(f"Source file not found: {source_file}")
+    
+    pipex_data_dir = create_pipex_data_structure(output_dir)
+    # Use pipex_data_dir directly as input directory (it's already set to input/ by default)
+    input_dir = pipex_data_dir
     
     # Channel information for your CellDIVE data
     channel_info = [
@@ -98,6 +119,9 @@ from pathlib import Path
 def extract_channels_for_pipex():
     input_file = "{source_file}"
     output_dir = Path("{input_dir}")
+    
+    print(f"Reading from: {{input_file}}")
+    print(f"Writing to: {{output_dir}}")
     
     channel_info = {channel_info}
     
@@ -169,6 +193,9 @@ def create_pipex_config(pipex_data_dir, channel_info):
     
     print(f"Created markers file: {markers_file}")
     
+    # Get PIPEX directory from environment or use default
+    pipex_dir = os.environ.get("PIPEX_DIR", "/mnt/data/Projects/HeLab/pipex")
+    
     # Create PIPEX command template
     pipex_command_template = f"""#!/bin/bash
 
@@ -177,7 +204,7 @@ def create_pipex_config(pipex_data_dir, channel_info):
 # Basic PIPEX command for your 23-channel CellDIVE data
 # Adjust parameters as needed for your specific analysis
 
-cd /mnt/data/Projects/HeLab/pipex
+cd {pipex_dir}
 
 # Basic segmentation and analysis
 python pipex.py \\
@@ -263,14 +290,49 @@ def create_cell_types_config(pipex_data_dir):
     return cell_types_file
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Setup PIPEX for CellDIVE dataset analysis",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python setup_pipex_for_celldive.py
+  python setup_pipex_for_celldive.py --source_file /path/to/CellDIVE_SLIDE-045_R0.aivia.tif
+  python setup_pipex_for_celldive.py --source_file /path/to/file.tif --output_dir ./my_analysis
+        """
+    )
+    
+    parser.add_argument(
+        '--source_file',
+        type=str,
+        default=None,
+        help='Path to source AIVIA TIF file (multi-channel)'
+    )
+    parser.add_argument(
+        '--output_dir',
+        type=str,
+        default=None,
+        help='Output directory for extracted files (default: ./input for Snakemake compatibility)'
+    )
+    parser.add_argument(
+        '--pipex_dir',
+        type=str,
+        default=None,
+        help='Path to PIPEX installation directory (or set PIPEX_DIR env var)'
+    )
+    
+    args = parser.parse_args()
+    
     print("PIPEX Setup for CellDIVE Bladder Dataset")
     print("=" * 50)
     
     # Setup environment
-    setup_pipex_environment()
+    setup_pipex_environment(args.pipex_dir)
     
     # Create directory structure and prepare data
-    pipex_data_dir, channel_info = prepare_celldive_for_pipex()
+    pipex_data_dir, channel_info = prepare_celldive_for_pipex(
+        source_file=args.source_file,
+        output_dir=args.output_dir
+    )
     
     # Create configuration files
     markers_file, command_file = create_pipex_config(pipex_data_dir, channel_info)

@@ -71,6 +71,37 @@ rule all:
         # Final report
         f"{RESULTS_DIR}/analysis_report.html"
 
+# Rule 0: Prepare input TIF files (copy/link from source directory if specified)
+source_data_dir = config.get("source_data_dir", "")
+if source_data_dir and Path(source_data_dir).exists():
+    rule prepare_inputs:
+        input:
+            source_files = expand(f"{source_data_dir}/{{channel}}.tif", channel=CHANNELS)
+        output:
+            input_files = expand(f"{INPUT_DIR}/{{channel}}.tif", channel=CHANNELS)
+        params:
+            channels = " ".join(CHANNELS),
+            source = source_data_dir,
+            dest = INPUT_DIR
+        shell:
+            """
+            # Create symlinks to avoid copying large files
+            for channel in {params.channels}; do
+                if [ ! -f {params.dest}/${{channel}}.tif ]; then
+                    ln -s {params.source}/${{channel}}.tif {params.dest}/${{channel}}.tif || \
+                    cp {params.source}/${{channel}}.tif {params.dest}/${{channel}}.tif
+                fi
+            done
+            """
+else:
+    # If no source directory, create a dummy rule that does nothing
+    # (files should already exist in input/)
+    rule prepare_inputs:
+        output:
+            input_files = expand(f"{INPUT_DIR}/{{channel}}.tif", channel=CHANNELS)
+        shell:
+            "echo 'No source_data_dir configured. Ensure TIF files are in {INPUT_DIR}/'"
+
 # Rule 1: Cell segmentation using StarDist + membrane refinement
 # Note: Measuring all 23 channels (23 x 9GB TIFs) causes OOM, so we measure only key markers
 rule segmentation:
