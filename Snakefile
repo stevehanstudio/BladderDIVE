@@ -16,6 +16,13 @@ INPUT_DIR = f"{WORK_DIR}/input"
 OUTPUT_DIR = f"{WORK_DIR}/output"
 RESULTS_DIR = f"{WORK_DIR}/results"
 
+# Channel list for your CellDIVE data
+CHANNELS = [
+    "DAPI", "CD45", "CD3E", "Ki67", "CD8a", "VIM", "CD68", "HLADR",
+    "CD31", "ACTA2", "CD20", "CD163", "CD44", "PANCK", "CD38", "CD11c",
+    "PDGFRA", "COL1A1", "CD14", "EPCAM", "CD56", "CD45RO", "DAPI2"
+]
+
 # Print paths for debugging
 print(f"WORK_DIR: {WORK_DIR}")
 print(f"INPUT_DIR: {INPUT_DIR}")
@@ -41,13 +48,6 @@ if missing_files:
         print(f"   ... and {len(missing_files) - 5} more")
     print(f"\nPlease ensure all TIF files are in: {INPUT_DIR}")
     print(f"Expected files: {', '.join(CHANNELS)}.tif\n")
-
-# Channel list for your CellDIVE data
-CHANNELS = [
-    "DAPI", "CD45", "CD3E", "Ki67", "CD8a", "VIM", "CD68", "HLADR",
-    "CD31", "ACTA2", "CD20", "CD163", "CD44", "PANCK", "CD38", "CD11c",
-    "PDGFRA", "COL1A1", "CD14", "EPCAM", "CD56", "CD45RO", "DAPI2"
-]
 
 # Target rule - what we want to achieve
 rule all:
