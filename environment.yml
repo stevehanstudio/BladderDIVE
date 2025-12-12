@@ -598,7 +598,7 @@ dependencies:
       - lxml==6.0.2
       - markupsafe==2.1.5
       - multidict==6.7.0
-      - numpy==1.26.4
+      - numpy>=2.0,<2.6
       - nvidia-cublas-cu12==12.8.4.1
       - nvidia-cuda-cupti-cu12==12.8.90
       - nvidia-cuda-nvrtc-cu12==12.8.93
