@@ -20,6 +20,28 @@ RESULTS_DIR = f"{WORK_DIR}/results"
 print(f"WORK_DIR: {WORK_DIR}")
 print(f"INPUT_DIR: {INPUT_DIR}")
 
+# Create required directories if they don't exist
+Path(INPUT_DIR).mkdir(parents=True, exist_ok=True)
+Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+Path(RESULTS_DIR).mkdir(parents=True, exist_ok=True)
+Path(f"{INPUT_DIR}/analysis").mkdir(parents=True, exist_ok=True)
+
+# Check if input files exist
+missing_files = []
+for channel in CHANNELS:
+    tif_file = Path(f"{INPUT_DIR}/{channel}.tif")
+    if not tif_file.exists():
+        missing_files.append(str(tif_file))
+
+if missing_files:
+    print(f"\n⚠️  WARNING: Missing {len(missing_files)} input TIF files:")
+    for f in missing_files[:5]:  # Show first 5
+        print(f"   - {f}")
+    if len(missing_files) > 5:
+        print(f"   ... and {len(missing_files) - 5} more")
+    print(f"\nPlease ensure all TIF files are in: {INPUT_DIR}")
+    print(f"Expected files: {', '.join(CHANNELS)}.tif\n")
+
 # Channel list for your CellDIVE data
 CHANNELS = [
     "DAPI", "CD45", "CD3E", "Ki67", "CD8a", "VIM", "CD68", "HLADR",
