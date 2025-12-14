@@ -1,0 +1,22 @@
+--- a/scripts/cellpose_segmentation.py
++++ b/scripts/cellpose_segmentation.py
+@@ -165,9 +165,15 @@ def calculate_tile_size(image_shape, available_memory_gb, channels=2, dtype_si
+     usable_memory_bytes = usable_memory_gb * (1024**3)
+     
+     # Memory needed per pixel: channels * dtype_size + intermediate arrays
+-    # Use 6x multiplier to be more conservative (Cellpose can use significant memory)
+-    bytes_per_pixel = channels * dtype_size * 6  # 6x for intermediate arrays and safety
++    # Use 10x multiplier to be very conservative (Cellpose can use significant memory)
++    bytes_per_pixel = channels * dtype_size * 10  # 10x for all intermediate arrays and safety
+     
+     # Calculate max pixels per tile
+     max_pixels = usable_memory_bytes / bytes_per_pixel
+     
++    # HARD LIMIT: Never create tiles larger than 1 GB (very conservative)
++    # This prevents issues even if calculation is off
++    max_tile_size_bytes = 1.0 * (1024**3)  # 1 GB max per tile
++    max_pixels_hard_limit = max_tile_size_bytes / (channels * dtype_size)
++    max_pixels = min(max_pixels, max_pixels_hard_limit)
++    
+     # Calculate tile dimensions (try to keep aspect ratio similar to image)
+     aspect_ratio = width / height

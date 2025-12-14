@@ -12,7 +12,7 @@ import gc
 import time
 import subprocess
 from pathlib import Path
-from tifffile import imread, imwrite
+from tifffile import imread, imwrite, TiffFile, memmap
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
 
@@ -163,11 +163,18 @@ def calculate_tile_size(image_shape, available_memory_gb, channels=2, dtype_size
     usable_memory_gb *= (1 - safety_margin)
     usable_memory_bytes = usable_memory_gb * (1024**3)
     
-    # Memory needed per pixel: channels * dtype_size + intermediate arrays (3x)
-    bytes_per_pixel = channels * dtype_size * 4  # 4x for intermediate arrays
+    # Memory needed per pixel: channels * dtype_size + intermediate arrays
+    # Use 10x multiplier to be very conservative (Cellpose can use significant memory)
+    bytes_per_pixel = channels * dtype_size * 10  # 10x for all intermediate arrays and safety
     
     # Calculate max pixels per tile
     max_pixels = usable_memory_bytes / bytes_per_pixel
+    
+    # HARD LIMIT: Never create tiles larger than 1 GB (very conservative)
+    # This prevents issues even if calculation is off
+    max_tile_size_bytes = 1.0 * (1024**3)  # 1 GB max per tile
+    max_pixels_hard_limit = max_tile_size_bytes / (channels * dtype_size)
+    max_pixels = min(max_pixels, max_pixels_hard_limit)
     
     # Calculate tile dimensions (try to keep aspect ratio similar to image)
     aspect_ratio = width / height
@@ -419,6 +426,69 @@ def format_time(seconds):
         return f"{hours} hours {minutes} minutes"
 
 
+def estimate_initial_time(num_tiles, tile_height, tile_width, use_gpu=False, 
+                            image_shape=None, channels=2):
+    """
+    Estimate initial processing time before any tiles are processed.
+    Uses heuristics based on typical Cellpose performance.
+    
+    Parameters:
+    -----------
+    num_tiles : int
+        Number of tiles to process
+    tile_height : int
+        Tile height in pixels
+    tile_width : int
+        Tile width in pixels
+    use_gpu : bool
+        Whether using GPU acceleration
+    image_shape : tuple or None
+        Full image shape (height, width) for full image processing
+    channels : int
+        Number of channels
+    
+    Returns:
+    --------
+    tuple: (estimated_seconds_min, estimated_seconds_max)
+        Range of estimated time in seconds
+    """
+    # Calculate pixels per tile
+    if image_shape is not None:
+        # Full image processing
+        height, width = image_shape
+        total_pixels = height * width * channels
+    else:
+        # Tiled processing
+        pixels_per_tile = tile_height * tile_width * channels
+        total_pixels = pixels_per_tile * num_tiles
+    
+    # Heuristic: Cellpose processing speed (pixels per second)
+    # Based on typical performance:
+    # - CPU: ~0.5-2 MPixels/sec (varies by CPU)
+    # - GPU: ~5-20 MPixels/sec (varies by GPU)
+    # Using conservative estimates
+    
+    if use_gpu:
+        # GPU: 5-15 MPixels/sec (conservative range)
+        pixels_per_sec_min = 5_000_000
+        pixels_per_sec_max = 15_000_000
+    else:
+        # CPU: 0.5-2 MPixels/sec (conservative range)
+        pixels_per_sec_min = 500_000
+        pixels_per_sec_max = 2_000_000
+    
+    # Calculate time estimates
+    time_min = total_pixels / pixels_per_sec_max
+    time_max = total_pixels / pixels_per_sec_min
+    
+    # Add overhead for tiling (10-20% for tile I/O and stitching)
+    if image_shape is None:  # Tiled processing
+        time_min *= 1.1
+        time_max *= 1.2
+    
+    return time_min, time_max
+
+
 def estimate_time(num_tiles, sample_time_per_tile, processing_mode='sequential', num_workers=1):
     """
     Estimate total processing time.
@@ -503,17 +573,51 @@ class ProgressTracker:
             print(f"  Average time per tile: {format_time(np.mean(self.tile_times))}")
 
 
+def read_tile_from_files(nuclear_file, cyto_file, y_start, y_end, x_start, x_end):
+    """
+    Read a tile directly from files without loading full images.
+    Uses memory-mapped reading for efficient region access.
+    
+    Note: For compressed TIFF files (e.g., JPEG compression), memory-mapped
+    reading may still require decompressing large portions. If you encounter
+    memory issues, try using smaller tile sizes or decompressing the TIFF files.
+    """
+    try:
+        # Use memory-mapped arrays to read only the needed region
+        nuc_memmap = memmap(nuclear_file)
+        cyto_memmap = memmap(cyto_file)
+        
+        # Extract the tile region (this only reads that region from disk)
+        # Note: For some compression types, this may still read more than needed
+        img_nuc_tile = np.array(nuc_memmap[y_start:y_end, x_start:x_end], copy=True)
+        img_cyto_tile = np.array(cyto_memmap[y_start:y_end, x_start:x_end], copy=True)
+        
+        # Close memory maps
+        del nuc_memmap, cyto_memmap
+        
+        return np.stack([img_nuc_tile, img_cyto_tile], axis=0)
+    except Exception as e:
+        # Fallback: if memmap fails, try TiffFile (may be less efficient)
+        print(f"⚠️  Warning: Memory-mapped reading failed, using fallback method: {e}")
+        with TiffFile(nuclear_file) as tif:
+            img_nuc_tile = tif.asarray(key=0)[y_start:y_end, x_start:x_end]
+        with TiffFile(cyto_file) as tif:
+            img_cyto_tile = tif.asarray(key=0)[y_start:y_end, x_start:x_end]
+        return np.stack([img_nuc_tile, img_cyto_tile], axis=0)
+
+
 def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu, 
-                                progress_tracker=None):
+                                progress_tracker=None, nuclear_file=None, cyto_file=None):
     """
     Process tiles with progress tracking.
+    Supports both in-memory array and file-based reading.
     
     Parameters:
     -----------
     model : CellposeModel
         Initialized model
-    imgs : np.ndarray
-        Full image array
+    imgs : np.ndarray or None
+        Full image array (None if reading from files)
     tiles : list
         List of tile coordinates
     diameter : float or None
@@ -524,6 +628,10 @@ def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu,
         Whether using GPU
     progress_tracker : ProgressTracker or None
         Progress tracker instance
+    nuclear_file : str or None
+        Path to nuclear channel file (if reading from files)
+    cyto_file : str or None
+        Path to cytoplasmic channel file (if reading from files)
     
     Returns:
     --------
@@ -531,12 +639,43 @@ def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu,
     """
     results = []
     num_tiles = len(tiles)
+    read_from_files = (nuclear_file is not None and cyto_file is not None)
+    
+    # Debug: Track memory usage
+    debug_mode = os.environ.get('CELLPOSE_DEBUG', '0') == '1'
     
     for i, (y_start, y_end, x_start, x_end) in enumerate(tiles):
         tile_start = time.time()
         
-        # Extract tile
-        img_tile = imgs[:, y_start:y_end, x_start:x_end]
+        # Check memory before reading tile (always check, warn if low)
+        mem_before = psutil.virtual_memory()
+        available_gb = mem_before.available / (1024**3)
+        
+        # Warn if memory is getting low (< 2 GB available)
+        if available_gb < 2.0:
+            print(f"\n⚠️  WARNING: Low memory before tile {i+1}/{num_tiles} - "
+                  f"Only {available_gb:.2f} GB available!")
+        
+        # Debug: Detailed memory info
+        if debug_mode:
+            print(f"\n  [DEBUG] Tile {i+1}/{num_tiles}: Before reading - "
+                  f"Available: {available_gb:.2f} GB, "
+                  f"Used: {mem_before.used / (1024**3):.2f} GB, "
+                  f"Percent: {mem_before.percent:.1f}%")
+        
+        # Extract tile from array or read from files
+        if read_from_files:
+            img_tile = read_tile_from_files(nuclear_file, cyto_file, y_start, y_end, x_start, x_end)
+        else:
+            img_tile = imgs[:, y_start:y_end, x_start:x_end]
+        
+        # Debug: Check memory after reading tile
+        if debug_mode:
+            mem_after_read = psutil.virtual_memory()
+            tile_size_mb = img_tile.nbytes / (1024**2)
+            print(f"  [DEBUG] Tile {i+1}/{num_tiles}: After reading ({tile_size_mb:.1f} MB) - "
+                  f"Available: {mem_after_read.available / (1024**3):.2f} GB, "
+                  f"Used: {mem_after_read.used / (1024**3):.2f} GB")
         
         # Process tile
         try:
@@ -545,11 +684,33 @@ def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu,
             results.append(result)
             
             tile_time = time.time() - tile_start
+            
+            # Debug: Check memory after processing
+            if debug_mode:
+                mem_after_process = psutil.virtual_memory()
+                print(f"  [DEBUG] Tile {i+1}/{num_tiles}: After processing - "
+                      f"Available: {mem_after_process.available / (1024**3):.2f} GB, "
+                      f"Used: {mem_after_process.used / (1024**3):.2f} GB")
+            
             if progress_tracker:
                 progress_tracker.update(i + 1, tile_time)
             
+            # Free tile memory immediately
+            del img_tile
+            del result  # Also free result immediately
+            gc.collect()
+            
+            # Debug: Check memory after cleanup
+            if debug_mode:
+                mem_after_cleanup = psutil.virtual_memory()
+                print(f"  [DEBUG] Tile {i+1}/{num_tiles}: After cleanup - "
+                      f"Available: {mem_after_cleanup.available / (1024**3):.2f} GB")
+            
         except Exception as e:
-            print(f"\nError processing tile {i+1}/{num_tiles}: {e}")
+            print(f"\n❌ Error processing tile {i+1}/{num_tiles}: {e}")
+            if debug_mode:
+                mem_error = psutil.virtual_memory()
+                print(f"  [DEBUG] Memory at error: Available: {mem_error.available / (1024**3):.2f} GB")
             raise
     
     if progress_tracker:
@@ -632,65 +793,93 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
     print(f"  Nuclear channel: {nuc_size_gb:.2f} GB")
     print(f"  Cytoplasmic channel: {cyto_size_gb:.2f} GB")
     
-    # Create output directory
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-    
-    # Load images
-    print(f"\n📥 Loading images...")
+    # Get image shape from metadata WITHOUT loading full images
+    print(f"\n📐 Reading image metadata...")
     try:
-        img_nucleus = imread(nuclear_file)
-        print(f"  Nuclear: {img_nucleus.shape}, dtype: {img_nucleus.dtype}")
-        gc.collect()
-    except MemoryError as e:
-        print(f"❌ ERROR: Insufficient memory to load nuclear channel: {e}")
-        raise
+        with TiffFile(nuclear_file) as tif:
+            image_shape = tif.pages[0].shape
+            dtype_size = tif.pages[0].dtype.itemsize
+        print(f"  Image shape: {image_shape}, dtype size: {dtype_size} bytes")
+    except Exception as e:
+        print(f"  ⚠️  Could not read metadata, will try loading sample: {e}")
+        # Fallback: read small sample
+        try:
+            sample = imread(nuclear_file)[:100, :100]
+            image_shape = sample.shape
+            dtype_size = sample.itemsize
+            del sample
+            gc.collect()
+        except Exception as e2:
+            print(f"  ❌ Could not read image: {e2}")
+            raise
     
-    try:
-        img_cyto = imread(cyto_file)
-        print(f"  Cytoplasmic: {img_cyto.shape}, dtype: {img_cyto.dtype}")
-        gc.collect()
-    except MemoryError as e:
-        print(f"❌ ERROR: Insufficient memory to load cytoplasmic channel: {e}")
-        raise
-    
-    # Combine channels
-    print(f"\n🔗 Stacking channels...")
-    imgs = np.stack([img_nucleus, img_cyto], axis=0)
-    image_shape = imgs.shape[1:]  # (height, width)
-    print(f"  Combined shape: {imgs.shape}")
-    
-    # Estimate memory needed for full image processing
-    # Image memory: channels * height * width * dtype_size
-    image_memory_gb = (imgs.size * imgs.itemsize) / (1024**3)
+    # Estimate memory needed BEFORE loading
+    # Two images + stacked array + processing overhead
+    single_image_memory_gb = (image_shape[0] * image_shape[1] * dtype_size) / (1024**3)
+    estimated_total_memory_gb = single_image_memory_gb * 6  # Conservative: 2 images + stack + 3x overhead
     model_memory_gb = 2.0 if actual_use_gpu else 1.0
-    total_needed_gb = image_memory_gb * 3 + model_memory_gb  # 3x for intermediate arrays
+    total_needed_gb = estimated_total_memory_gb + model_memory_gb
     
-    # Determine if tiling is needed
+    # Determine if tiling is needed BEFORE loading
     use_tiling = False
+    tile_height = None
+    tile_width = None
+    
     if tile_size is not None:
         use_tiling = True
         tile_height, tile_width = tile_size
         print(f"\n🔲 Using manual tile size: {tile_height} × {tile_width} pixels")
-    elif total_needed_gb > available_gb * 0.7:  # Use 70% threshold
+    elif estimated_total_memory_gb > available_gb * 0.5:  # Use 50% threshold (conservative)
         use_tiling = True
-        print(f"\n⚠️  Image too large for available memory ({total_needed_gb:.2f} GB needed, {available_gb:.2f} GB available)")
-        print(f"  🔲 Will use automatic tiling")
+        print(f"\n⚠️  Images too large for available memory (estimated {estimated_total_memory_gb:.2f} GB needed, {available_gb:.2f} GB available)")
+        print(f"  🔲 Will use automatic tiling (reading tiles on-demand from files)")
         
         # Calculate optimal tile size
         memory_for_tiling = available_gb if not actual_use_gpu else min(available_gb, gpu_free_gb if gpu_free_gb > 0 else available_gb)
         tile_height, tile_width = calculate_tile_size(
-            image_shape, memory_for_tiling, channels=2, dtype_size=2, 
+            image_shape, memory_for_tiling, channels=2, dtype_size=dtype_size, 
             model_memory_gb=model_memory_gb
         )
         print(f"  Calculated tile size: {tile_height} × {tile_width} pixels")
     else:
-        print(f"\n✅ Sufficient memory available ({total_needed_gb:.2f} GB needed)")
+        print(f"\n✅ Sufficient memory available (estimated {estimated_total_memory_gb:.2f} GB needed)")
         print(f"  Will process full image without tiling")
     
-    # Free individual channel arrays
-    del img_nucleus, img_cyto
-    gc.collect()
+    # Create output directory
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    # Load images only if NOT using tiling
+    imgs = None
+    if not use_tiling:
+        print(f"\n📥 Loading images...")
+        try:
+            img_nucleus = imread(nuclear_file)
+            print(f"  Nuclear: {img_nucleus.shape}, dtype: {img_nucleus.dtype}")
+            gc.collect()
+            
+            img_cyto = imread(cyto_file)
+            print(f"  Cytoplasmic: {img_cyto.shape}, dtype: {img_cyto.dtype}")
+            gc.collect()
+            
+            # Combine channels
+            print(f"\n🔗 Stacking channels...")
+            imgs = np.stack([img_nucleus, img_cyto], axis=0)
+            print(f"  Combined shape: {imgs.shape}")
+            
+            # Free individual arrays
+            del img_nucleus, img_cyto
+            gc.collect()
+        except MemoryError as e:
+            print(f"❌ ERROR: Insufficient memory to load images: {e}")
+            print(f"  Falling back to tiling mode...")
+            use_tiling = True
+            memory_for_tiling = available_gb if not actual_use_gpu else min(available_gb, gpu_free_gb if gpu_free_gb > 0 else available_gb)
+            tile_height, tile_width = calculate_tile_size(
+                image_shape, memory_for_tiling, channels=2, dtype_size=dtype_size, 
+                model_memory_gb=model_memory_gb
+            )
+            print(f"  Using tile size: {tile_height} × {tile_width} pixels")
     
     # Initialize model
     print(f"\n🤖 Initializing Cellpose model...")
@@ -710,8 +899,6 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
     
     # Initialize tiling variables
     tiles = None
-    tile_height = None
-    tile_width = None
     overlap_pixels = None
     num_tiles = 0
     
@@ -741,11 +928,19 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
         
         # Process all tiles with progress tracking
         print(f"\n🔄 Processing {num_tiles} tiles...")
+        # Show initial time estimate
+        time_min, time_max = estimate_initial_time(num_tiles, tile_height, tile_width, 
+                                                    actual_use_gpu, channels=2)
+        print(f"  ⏱️  Estimated time: {format_time(time_min)} - {format_time(time_max)} "
+              f"(based on {'GPU' if actual_use_gpu else 'CPU'} processing)")
+        
         progress_tracker = ProgressTracker(num_tiles)
         
         try:
             tile_results = process_tiles_with_progress(
-                model, imgs, tiles, diameter, [0, 1], actual_use_gpu, progress_tracker
+                model, imgs, tiles, diameter, [0, 1], actual_use_gpu, progress_tracker,
+                nuclear_file=nuclear_file if use_tiling else None,
+                cyto_file=cyto_file if use_tiling else None
             )
             
             # Stitch tiles
@@ -772,7 +967,9 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
                 
                 progress_tracker = ProgressTracker(len(tiles))
                 tile_results = process_tiles_with_progress(
-                    model, imgs, tiles, diameter, [0, 1], actual_use_gpu, progress_tracker
+                    model, imgs, tiles, diameter, [0, 1], actual_use_gpu, progress_tracker,
+                    nuclear_file=nuclear_file if use_tiling else None,
+                    cyto_file=cyto_file if use_tiling else None
                 )
                 masks = stitch_tiles(tile_results, tiles, image_shape, overlap_pixels)
                 
@@ -791,6 +988,12 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
     else:
         # Process full image
         print(f"\n🔄 Running segmentation on full image...")
+        # Show initial time estimate
+        time_min, time_max = estimate_initial_time(1, None, None, actual_use_gpu, 
+                                                    image_shape=image_shape, channels=2)
+        print(f"  ⏱️  Estimated time: {format_time(time_min)} - {format_time(time_max)} "
+              f"(based on {'GPU' if actual_use_gpu else 'CPU'} processing)")
+        
         try:
             # Cellpose v4+ auto-detects channels for 2-channel images
             if imgs.shape[0] == 2:
@@ -822,7 +1025,9 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
                 print(f"  Using tiles: {tile_height} × {tile_width}, {num_tiles} tiles")
                 progress_tracker = ProgressTracker(num_tiles)
                 tile_results = process_tiles_with_progress(
-                    model, imgs, tiles, diameter, [0, 1], False, progress_tracker
+                    model, None, tiles, diameter, [0, 1], False, progress_tracker,
+                    nuclear_file=nuclear_file,
+                    cyto_file=cyto_file
                 )
                 masks = stitch_tiles(tile_results, tiles, image_shape, overlap_pixels)
                 
@@ -865,7 +1070,10 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
             f.write(f"Tile size: {tile_height} × {tile_width}\n")
             f.write(f"Tile overlap: {overlap_pixels} pixels\n")
         f.write(f"Number of cells detected: {n_cells}\n")
-        f.write(f"Image shape: {imgs.shape}\n")
+        if imgs is not None:
+            f.write(f"Image shape: {imgs.shape}\n")
+        else:
+            f.write(f"Image shape: {image_shape}\n")
         if diams is not None:
             if isinstance(diams, (list, np.ndarray)):
                 f.write(f"Average cell diameter: {np.mean(diams):.2f} pixels\n")
@@ -877,7 +1085,8 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
     print(f"\n✅ All outputs saved to: {output_path}")
     
     # Cleanup
-    del imgs
+    if imgs is not None:
+        del imgs
     gc.collect()
     
     return masks, flows, styles, diams
@@ -895,6 +1104,9 @@ Examples:
   python cellpose_segmentation.py input/DAPI.tif input/VIM.tif -m cyto2 -d 30
   python cellpose_segmentation.py input/DAPI.tif input/VIM.tif --tile-size 2048 2048
   python cellpose_segmentation.py input/DAPI.tif input/VIM.tif --overlap 200 --gpu-memory-limit 4.0
+
+Debug mode (for troubleshooting memory issues):
+  CELLPOSE_DEBUG=1 python cellpose_segmentation.py input/DAPI.tif input/VIM.tif
         """
     )
     

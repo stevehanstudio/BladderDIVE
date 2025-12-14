@@ -1,5 +1,8 @@
 # BladderDIVE Project .gitignore
 
+# Temporary Notebook file - remove after use
+igaxenium.ipynb
+
 # =============================================================================
 # LARGE DATA FILES - Microscopy Images & Analysis Outputs
 # =============================================================================
