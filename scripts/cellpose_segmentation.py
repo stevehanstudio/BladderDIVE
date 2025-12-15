@@ -301,34 +301,68 @@ def process_tile(model, img_tile, tile_coords, diameter=None, channels=[0, 1], u
     --------
     tuple: (masks, flows, styles, diams, tile_coords)
     """
+
+    def _run_eval(img):
+        """
+        Wrapper around model.eval that is robust to the number of
+        returned values (3 or 4), which can vary across Cellpose
+        versions and GPU/CPU paths.
+        """
+        result = model.eval(img, diameter=diameter)
+        # Cellpose typically returns (masks, flows, styles, diams),
+        # but in some cases (e.g. very large images / disabled QC)
+        # it may return only 3 values.
+        if isinstance(result, tuple):
+            if len(result) == 4:
+                masks, flows, styles, diams = result
+            elif len(result) == 3:
+                masks, flows, styles = result
+                diams = None
+            else:
+                # Fallback: only masks returned, or unexpected structure
+                masks = result[0]
+                flows = styles = diams = None
+        else:
+            # Unexpected non-tuple return; treat as masks only
+            masks = result
+            flows = styles = diams = None
+        return masks, flows, styles, diams
+
     try:
         # Cellpose v4+ handles channels differently
         # If image has 2 channels, it automatically uses them as [nuclear, cytoplasmic]
         # The channels parameter is deprecated in v4.0.1+
         if img_tile.shape[0] == 2:
             # Two-channel image - Cellpose will auto-detect
-            masks, flows, styles, diams = model.eval(
-                img_tile,
-                diameter=diameter
-            )
+            masks, flows, styles, diams = _run_eval(img_tile)
         else:
             # Single channel or more than 2 - specify channels
-            masks, flows, styles, diams = model.eval(
+            result = model.eval(
                 img_tile,
                 diameter=diameter,
                 channels=channels if len(channels) == 2 else None
             )
+            # Normalize return shape
+            if isinstance(result, tuple):
+                if len(result) == 4:
+                    masks, flows, styles, diams = result
+                elif len(result) == 3:
+                    masks, flows, styles = result
+                    diams = None
+                else:
+                    masks = result[0]
+                    flows = styles = diams = None
+            else:
+                masks = result
+                flows = styles = diams = None
         return masks, flows, styles, diams, tile_coords
     except RuntimeError as e:
         if "expanded size" in str(e) or "tensor" in str(e).lower():
             # Tensor size mismatch - try without channels parameter
             try:
-                masks, flows, styles, diams = model.eval(
-                    img_tile,
-                    diameter=diameter
-                )
+                masks, flows, styles, diams = _run_eval(img_tile)
                 return masks, flows, styles, diams, tile_coords
-            except:
+            except Exception:
                 raise RuntimeError(f"Tile processing failed: {e}")
         else:
             raise
@@ -1013,13 +1047,26 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
         try:
             # Cellpose v4+ auto-detects channels for 2-channel images
             if imgs.shape[0] == 2:
-                masks, flows, styles, diams = model.eval(imgs, diameter=diameter)
+                result = model.eval(imgs, diameter=diameter)
             else:
-                masks, flows, styles, diams = model.eval(
+                result = model.eval(
                     imgs,
                     diameter=diameter,
                     channels=[0, 1] if len(imgs.shape) == 3 else None
                 )
+            # Normalize return shape (3 or 4 values)
+            if isinstance(result, tuple):
+                if len(result) == 4:
+                    masks, flows, styles, diams = result
+                elif len(result) == 3:
+                    masks, flows, styles = result
+                    diams = None
+                else:
+                    masks = result[0]
+                    flows = styles = diams = None
+            else:
+                masks = result
+                flows = styles = diams = None
         except RuntimeError as e:
             if "CUDA out of memory" in str(e) or "out of memory" in str(e).lower():
                 print(f"\n⚠️  GPU memory error: {e}")
