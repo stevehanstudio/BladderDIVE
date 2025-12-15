@@ -821,21 +821,37 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
     total_needed_gb = estimated_total_memory_gb + model_memory_gb
     
     # Determine if tiling is needed BEFORE loading
+    # IMPORTANT: when using GPU, we should compare against GPU memory,
+    # not just system RAM, otherwise we may try to process a full image
+    # that fits in RAM but does NOT fit in GPU memory.
     use_tiling = False
     tile_height = None
     tile_width = None
+    
+    # Effective memory budget for deciding tiling
+    # - On CPU: use available system RAM
+    # - On GPU: use the minimum of system RAM and free GPU memory
+    if actual_use_gpu and gpu_free_gb > 0:
+        memory_limit_gb = min(available_gb, gpu_free_gb)
+    else:
+        memory_limit_gb = available_gb
     
     if tile_size is not None:
         use_tiling = True
         tile_height, tile_width = tile_size
         print(f"\n🔲 Using manual tile size: {tile_height} × {tile_width} pixels")
-    elif estimated_total_memory_gb > available_gb * 0.5:  # Use 50% threshold (conservative)
+    elif estimated_total_memory_gb > memory_limit_gb * 0.5:  # Use 50% threshold (conservative)
         use_tiling = True
-        print(f"\n⚠️  Images too large for available memory (estimated {estimated_total_memory_gb:.2f} GB needed, {available_gb:.2f} GB available)")
+        if actual_use_gpu and gpu_free_gb > 0:
+            print(f"\n⚠️  Images too large for available GPU memory "
+                  f"(estimated {estimated_total_memory_gb:.2f} GB needed, {gpu_free_gb:.2f} GB GPU free)")
+        else:
+            print(f"\n⚠️  Images too large for available memory "
+                  f"(estimated {estimated_total_memory_gb:.2f} GB needed, {available_gb:.2f} GB available)")
         print(f"  🔲 Will use automatic tiling (reading tiles on-demand from files)")
         
         # Calculate optimal tile size
-        memory_for_tiling = available_gb if not actual_use_gpu else min(available_gb, gpu_free_gb if gpu_free_gb > 0 else available_gb)
+        memory_for_tiling = memory_limit_gb
         tile_height, tile_width = calculate_tile_size(
             image_shape, memory_for_tiling, channels=2, dtype_size=dtype_size, 
             model_memory_gb=model_memory_gb
