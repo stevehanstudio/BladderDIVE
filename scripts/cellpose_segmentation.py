@@ -596,8 +596,8 @@ class ProgressTracker:
             tiles_per_min = 0
         
         # Print progress
-        print(f"\r  Progress: {self.completed}/{self.total_tiles} tiles ({percent:.1f}%) | "
-              f"ETA: {eta_str} | Speed: {tiles_per_min:.1f} tiles/min", end='', flush=True)
+        print(f"  Progress: {self.completed}/{self.total_tiles} tiles ({percent:.1f}%) | "
+              f"ETA: {eta_str} | Speed: {tiles_per_min:.1f} tiles/min", flush=True)
     
     def finish(self):
         """Finish progress tracking and print summary."""
