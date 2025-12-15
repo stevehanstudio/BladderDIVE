@@ -1,0 +1,71 @@
+flowchart TD
+    Start([Start: Choose Best Device]) --> CheckForceCPU{force_cpu<br/>flag set?}
+    
+    CheckForceCPU -->|Yes| UseCPU1[Use CPU<br/>Reason: CPU forced]
+
+    CheckForceCPU -->|No| CheckUseGPU{use_gpu<br/>flag set?}
+    
+    CheckUseGPU -->|Yes| CheckGPUMem{GPU available<br/>& sufficient memory?}
+    CheckGPUMem -->|Yes| UseGPU1[Use GPU<br/>Reason: GPU explicitly requested]
+    CheckGPUMem -->|No| UseCPU2[Use CPU<br/>Reason: GPU unavailable/insufficient memory]
+    
+    CheckUseGPU -->|No| CheckGPUAvail{GPU available<br/>& sufficient memory?}
+    CheckGPUAvail -->|No| UseCPU3[Use CPU<br/>Reason: GPU not available]
+    
+    CheckGPUAvail -->|Yes| ReadMetadata[Read Image Metadata<br/>shape, dtype_size]
+    
+    ReadMetadata --> EstimateMem[Estimate Memory Needed<br/>single_image_memory × 6<br/>+ model_memory]
+    
+    EstimateMem --> CheckGPUTiling{GPU scenario:<br/>memory > 50% of<br/>minRAM, GPU_mem?}
+    EstimateMem --> CheckCPUTiling{CPU scenario:<br/>memory > 50% of<br/>available RAM?}
+    
+    CheckGPUTiling -->|Yes| CalcGPUTiles[Calculate GPU Tile Size<br/>Based on GPU memory]
+    CheckGPUTiling -->|No| GPUNoTiling[GPU: No tiling<br/>num_tiles = 1]
+    
+    CheckCPUTiling -->|Yes| CalcCPUTiles[Calculate CPU Tile Size<br/>Based on CPU memory]
+    CheckCPUTiling -->|No| CPUNoTiling[CPU: No tiling<br/>num_tiles = 1]
+    
+    CalcGPUTiles --> GenGPUTiles[Generate GPU Tiles<br/>Calculate overlap<br/>Count num_tiles]
+    CalcCPUTiles --> GenCPUTiles[Generate CPU Tiles<br/>Calculate overlap<br/>Count num_tiles]
+    
+    GenGPUTiles --> EstGPURuntime[Estimate GPU Runtime<br/>With tiling overhead<br/>if applicable]
+    GPUNoTiling --> EstGPURuntime
+    
+    GenCPUTiles --> EstCPURuntime[Estimate CPU Runtime<br/>With tiling overhead<br/>if applicable]
+    CPUNoTiling --> EstCPURuntime
+    
+    EstGPURuntime --> GetGPUUtil[Get GPU Utilization %<br/>via nvidia-smi or pynvml]
+    EstCPURuntime --> GetCPULoad[Get CPU Load %<br/>via psutil]
+    
+    GetGPUUtil --> AdjustGPU[Adjust GPU Time<br/>time × 1.0 + util% × 0.5<br/>or × 1.2 if unknown]
+    GetCPULoad --> AdjustCPU[Adjust CPU Time<br/>time × 1.0 + load% × 0.5]
+    
+    AdjustGPU --> CompareTimes{GPU adjusted time<br/>< CPU adjusted time?}
+    AdjustCPU --> CompareTimes
+    
+    CompareTimes -->|Yes| CheckGPUMem2{GPU has<br/>sufficient memory?}
+    CompareTimes -->|No| UseCPU4[Use CPU<br/>Reason: CPU faster<br/>Show estimates]
+    
+    CheckGPUMem2 -->|Yes| UseGPU2[Use GPU<br/>Reason: GPU faster<br/>Show estimates<br/>Use GPU tiling params]
+    CheckGPUMem2 -->|No| UseCPU5[Use CPU<br/>Reason: GPU faster but<br/>insufficient memory<br/>Use CPU tiling params]
+    
+    UseCPU1 --> End([End: Return device choice<br/>+ tiling params])
+    UseGPU1 --> End
+    UseCPU2 --> End
+    UseCPU3 --> End
+    UseCPU4 --> End
+    UseCPU5 --> End
+    UseGPU2 --> End
+    
+    style Start fill:#e1f5fe
+    style End fill:#c8e6c9
+    style UseGPU1 fill:#fff9c4
+    style UseGPU2 fill:#fff9c4
+    style UseCPU1 fill:#ffccbc
+    style UseCPU2 fill:#ffccbc
+    style UseCPU3 fill:#ffccbc
+    style UseCPU4 fill:#ffccbc
+    style UseCPU5 fill:#ffccbc
+    style CompareTimes fill:#f3e5f5
+    style CheckGPUTiling fill:#e3f2fd
+    style CheckCPUTiling fill:#e3f2fd
