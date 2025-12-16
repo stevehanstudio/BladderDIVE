@@ -132,6 +132,50 @@ def check_cpu_resources():
     return available_cores, cpu_load_percent
 
 
+def get_current_gpu_memory():
+    """
+    Get current free GPU memory in GB.
+    
+    Returns:
+    --------
+    float or None: Free GPU memory in GB, or None if not available
+    """
+    if TORCH_AVAILABLE and torch.cuda.is_available():
+        try:
+            gpu_id = 0
+            total_memory = torch.cuda.get_device_properties(gpu_id).total_memory / (1024**3)
+            reserved = torch.cuda.memory_reserved(gpu_id) / (1024**3)
+            free_memory = total_memory - reserved
+            return free_memory
+        except Exception:
+            pass
+    
+    # Try nvidia-smi as fallback
+    try:
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=memory.free', '--format=csv,nounits,noheader'],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if result.returncode == 0:
+            free_mb = float(result.stdout.strip().split('\n')[0])
+            return free_mb / 1024  # Convert MB to GB
+    except Exception:
+        pass
+    
+    return None
+
+
+def clear_gpu_cache():
+    """Clear PyTorch GPU cache if available."""
+    if TORCH_AVAILABLE and torch.cuda.is_available():
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+
+
 def calculate_tile_size(image_shape, available_memory_gb, channels=2, dtype_size=2, 
                         model_memory_gb=2.0, safety_margin=0.25):
     """
@@ -711,6 +755,19 @@ def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu,
                   f"Available: {mem_after_read.available / (1024**3):.2f} GB, "
                   f"Used: {mem_after_read.used / (1024**3):.2f} GB")
         
+        # Check GPU memory before processing (if using GPU)
+        if use_gpu:
+            gpu_free = get_current_gpu_memory()
+            if gpu_free is not None:
+                if gpu_free < 0.5:  # Less than 500 MB free
+                    print(f"\n⚠️  Low GPU memory before tile {i+1}/{num_tiles}: {gpu_free:.2f} GB free")
+                    print(f"  Clearing GPU cache...")
+                    clear_gpu_cache()
+                    # Re-check after clearing
+                    gpu_free_after = get_current_gpu_memory()
+                    if gpu_free_after is not None and gpu_free_after < 0.3:
+                        print(f"  ⚠️  Still low GPU memory: {gpu_free_after:.2f} GB free")
+        
         # Process tile
         try:
             result = process_tile(model, img_tile, (y_start, y_end, x_start, x_end), 
@@ -734,12 +791,57 @@ def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu,
             del result  # Also free result immediately
             gc.collect()
             
+            # Clear GPU cache after each tile (if using GPU)
+            if use_gpu:
+                clear_gpu_cache()
+            
             # Debug: Check memory after cleanup
             if debug_mode:
                 mem_after_cleanup = psutil.virtual_memory()
                 print(f"  [DEBUG] Tile {i+1}/{num_tiles}: After cleanup - "
                       f"Available: {mem_after_cleanup.available / (1024**3):.2f} GB")
             
+        except RuntimeError as e:
+            error_str = str(e)
+            if "CUDA out of memory" in error_str or "out of memory" in error_str.lower():
+                print(f"\n❌ GPU out of memory error processing tile {i+1}/{num_tiles}")
+                print(f"  Error: {error_str}")
+                
+                # Clear GPU cache and try once more
+                if use_gpu:
+                    print(f"  Clearing GPU cache and retrying...")
+                    clear_gpu_cache()
+                    gc.collect()
+                    
+                    # Check if we have enough memory now
+                    gpu_free = get_current_gpu_memory()
+                    if gpu_free is not None:
+                        print(f"  GPU memory after clearing: {gpu_free:.2f} GB free")
+                    
+                    # Try processing again
+                    try:
+                        result = process_tile(model, img_tile, (y_start, y_end, x_start, x_end), 
+                                            diameter, channels, use_gpu)
+                        results.append(result)
+                        tile_time = time.time() - tile_start
+                        if progress_tracker:
+                            progress_tracker.update(i + 1, tile_time)
+                        del img_tile
+                        del result
+                        gc.collect()
+                        if use_gpu:
+                            clear_gpu_cache()
+                        print(f"  ✅ Retry successful")
+                        continue
+                    except Exception as retry_e:
+                        print(f"  ❌ Retry also failed: {retry_e}")
+                        raise RuntimeError(f"GPU OOM error persisted after cache clear. "
+                                         f"Consider using smaller tile size or CPU processing. "
+                                         f"Original error: {error_str}")
+                else:
+                    raise
+            else:
+                raise
         except Exception as e:
             print(f"\n❌ Error processing tile {i+1}/{num_tiles}: {e}")
             if debug_mode:
