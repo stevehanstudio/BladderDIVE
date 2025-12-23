@@ -172,8 +172,68 @@ def clear_gpu_cache():
     if TORCH_AVAILABLE and torch.cuda.is_available():
         try:
             torch.cuda.empty_cache()
+            # Also synchronize to ensure cache clearing completes
+            torch.cuda.synchronize()
         except Exception:
             pass
+
+
+def check_gpu_allocation_possible(size_mb=100):
+    """
+    Check if we can actually allocate a test tensor on GPU.
+    This helps detect memory fragmentation issues.
+    
+    Parameters:
+    -----------
+    size_mb : float
+        Size of test allocation in MB
+    
+    Returns:
+    --------
+    bool: True if allocation succeeded, False otherwise
+    """
+    if not TORCH_AVAILABLE or not torch.cuda.is_available():
+        return False
+    
+    try:
+        # Try to allocate a small test tensor
+        test_size = int(size_mb * 1024 * 1024 / 4)  # Convert MB to float32 elements
+        test_tensor = torch.zeros(test_size, device='cuda:0', dtype=torch.float32)
+        del test_tensor
+        torch.cuda.empty_cache()
+        return True
+    except RuntimeError as e:
+        if "out of memory" in str(e).lower():
+            return False
+        # Other errors, assume it's possible
+        return True
+    except Exception:
+        # Unknown error, assume it's possible
+        return True
+
+
+def aggressive_gpu_cleanup():
+    """
+    Perform aggressive GPU memory cleanup to handle fragmentation.
+    This includes multiple cache clears and synchronization.
+    """
+    if not TORCH_AVAILABLE or not torch.cuda.is_available():
+        return
+    
+    try:
+        # Multiple cache clears to help with fragmentation
+        for _ in range(3):
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        
+        # Force Python garbage collection
+        gc.collect()
+        
+        # One more cache clear after GC
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+    except Exception:
+        pass
 
 
 def calculate_tile_size(image_shape, available_memory_gb, channels=2, dtype_size=2, 
@@ -741,6 +801,19 @@ def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu,
                   f"Used: {mem_before.used / (1024**3):.2f} GB, "
                   f"Percent: {mem_before.percent:.1f}%")
         
+        # Check GPU memory before reading tile (if using GPU)
+        if use_gpu:
+            gpu_free = get_current_gpu_memory()
+            if gpu_free is not None:
+                if gpu_free < 0.5:  # Less than 500 MB free
+                    print(f"\n⚠️  Low GPU memory before tile {i+1}/{num_tiles}: {gpu_free:.2f} GB free")
+                    print(f"  Clearing GPU cache...")
+                    clear_gpu_cache()
+                    # Re-check after clearing
+                    gpu_free_after = get_current_gpu_memory()
+                    if gpu_free_after is not None and gpu_free_after < 0.3:
+                        print(f"  ⚠️  Still low GPU memory: {gpu_free_after:.2f} GB free")
+        
         # Extract tile from array or read from files
         if read_from_files:
             img_tile = read_tile_from_files(nuclear_file, cyto_file, y_start, y_end, x_start, x_end)
@@ -755,18 +828,21 @@ def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu,
                   f"Available: {mem_after_read.available / (1024**3):.2f} GB, "
                   f"Used: {mem_after_read.used / (1024**3):.2f} GB")
         
-        # Check GPU memory before processing (if using GPU)
+        # Check GPU memory fragmentation after reading tile (if using GPU)
         if use_gpu:
-            gpu_free = get_current_gpu_memory()
-            if gpu_free is not None:
-                if gpu_free < 0.5:  # Less than 500 MB free
-                    print(f"\n⚠️  Low GPU memory before tile {i+1}/{num_tiles}: {gpu_free:.2f} GB free")
-                    print(f"  Clearing GPU cache...")
-                    clear_gpu_cache()
-                    # Re-check after clearing
-                    gpu_free_after = get_current_gpu_memory()
-                    if gpu_free_after is not None and gpu_free_after < 0.3:
-                        print(f"  ⚠️  Still low GPU memory: {gpu_free_after:.2f} GB free")
+            # Estimate tile memory needs (rough: tile size * channels * dtype * overhead)
+            tile_size_mb = img_tile.nbytes / (1024**2)
+            estimated_needed_mb = tile_size_mb * 5  # Conservative estimate with overhead
+            
+            if not check_gpu_allocation_possible(estimated_needed_mb):
+                print(f"\n⚠️  GPU memory fragmentation detected - cannot allocate {estimated_needed_mb:.0f} MB")
+                print(f"  Performing aggressive cleanup...")
+                aggressive_gpu_cleanup()
+                
+                # Re-check allocation
+                if not check_gpu_allocation_possible(estimated_needed_mb):
+                    print(f"  ⚠️  Fragmentation persists - may fail during processing")
+                    print(f"  💡 Tip: Set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to reduce fragmentation")
         
         # Process tile
         try:
@@ -807,36 +883,78 @@ def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu,
                 print(f"\n❌ GPU out of memory error processing tile {i+1}/{num_tiles}")
                 print(f"  Error: {error_str}")
                 
-                # Clear GPU cache and try once more
+                # Try multiple retry strategies for GPU OOM
                 if use_gpu:
-                    print(f"  Clearing GPU cache and retrying...")
-                    clear_gpu_cache()
-                    gc.collect()
+                    max_retries = 3
+                    retry_successful = False
                     
-                    # Check if we have enough memory now
-                    gpu_free = get_current_gpu_memory()
-                    if gpu_free is not None:
-                        print(f"  GPU memory after clearing: {gpu_free:.2f} GB free")
-                    
-                    # Try processing again
-                    try:
-                        result = process_tile(model, img_tile, (y_start, y_end, x_start, x_end), 
-                                            diameter, channels, use_gpu)
-                        results.append(result)
-                        tile_time = time.time() - tile_start
-                        if progress_tracker:
-                            progress_tracker.update(i + 1, tile_time)
-                        del img_tile
-                        del result
-                        gc.collect()
-                        if use_gpu:
+                    for retry_attempt in range(1, max_retries + 1):
+                        print(f"  Retry attempt {retry_attempt}/{max_retries}...")
+                        
+                        if retry_attempt == 1:
+                            # First retry: simple cache clear
+                            print(f"    Clearing GPU cache...")
                             clear_gpu_cache()
-                        print(f"  ✅ Retry successful")
-                        continue
-                    except Exception as retry_e:
-                        print(f"  ❌ Retry also failed: {retry_e}")
-                        raise RuntimeError(f"GPU OOM error persisted after cache clear. "
-                                         f"Consider using smaller tile size or CPU processing. "
+                            gc.collect()
+                        elif retry_attempt == 2:
+                            # Second retry: aggressive cleanup
+                            print(f"    Performing aggressive GPU cleanup...")
+                            aggressive_gpu_cleanup()
+                        else:
+                            # Third retry: aggressive cleanup + wait a bit
+                            print(f"    Final aggressive cleanup with delay...")
+                            aggressive_gpu_cleanup()
+                            time.sleep(1)  # Brief pause to let GPU settle
+                        
+                        # Check memory status
+                        gpu_free = get_current_gpu_memory()
+                        if gpu_free is not None:
+                            print(f"    GPU memory: {gpu_free:.2f} GB free")
+                        
+                        # Try processing again
+                        try:
+                            result = process_tile(model, img_tile, (y_start, y_end, x_start, x_end), 
+                                                diameter, channels, use_gpu)
+                            results.append(result)
+                            tile_time = time.time() - tile_start
+                            if progress_tracker:
+                                progress_tracker.update(i + 1, tile_time)
+                            del img_tile
+                            del result
+                            gc.collect()
+                            if use_gpu:
+                                clear_gpu_cache()
+                            print(f"  ✅ Retry {retry_attempt} successful!")
+                            retry_successful = True
+                            break
+                        except RuntimeError as retry_e:
+                            retry_error_str = str(retry_e)
+                            if "out of memory" in retry_error_str.lower():
+                                print(f"    Retry {retry_attempt} failed: still OOM")
+                                if retry_attempt < max_retries:
+                                    continue
+                            else:
+                                # Different error, re-raise
+                                raise
+                        except Exception as retry_e:
+                            print(f"    Retry {retry_attempt} failed: {retry_e}")
+                            if retry_attempt < max_retries:
+                                continue
+                            else:
+                                raise
+                    
+                    if not retry_successful:
+                        # All retries failed
+                        # Calculate tile size from coordinates for error message
+                        current_tile_height = y_end - y_start
+                        current_tile_width = x_end - x_start
+                        print(f"\n  ❌ All {max_retries} retry attempts failed")
+                        print(f"  💡 Suggestions:")
+                        print(f"     - Use smaller tile size (current tile: {current_tile_height} × {current_tile_width})")
+                        print(f"     - Set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True")
+                        print(f"     - Process on CPU instead (remove --gpu flag)")
+                        print(f"     - Free GPU memory from other processes")
+                        raise RuntimeError(f"GPU OOM error persisted after {max_retries} retry attempts. "
                                          f"Original error: {error_str}")
                 else:
                     raise
