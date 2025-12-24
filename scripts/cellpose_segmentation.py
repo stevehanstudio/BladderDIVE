@@ -1379,7 +1379,6 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
                     status = get_gpu_memory_status()
                     other_processes_using_gpu = False
                     if status and status['processes']:
-                        import os
                         current_pid = os.getpid()
                         other_procs = [p for p in status['processes'] 
                                      if str(p['pid']) != str(current_pid)]
@@ -1395,7 +1394,6 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
                         print(f"  Other processes are using GPU memory")
                         
                         # Wait for memory (default 5 minutes timeout)
-                        import os
                         success, final_free, waited = wait_for_gpu_memory(
                             required_gb=tile_memory_gb * 1.5,
                             timeout_seconds=300,
