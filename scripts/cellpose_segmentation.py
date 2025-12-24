@@ -1519,18 +1519,56 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
                 print(f"  New tile size: {tile_height} × {tile_width}, {len(tiles)} tiles")
                 
                 progress_tracker = ProgressTracker(len(tiles))
-                tile_results = process_tiles_with_progress(
-                    model, imgs, tiles, diameter, [0, 1], actual_use_gpu, progress_tracker,
-                    nuclear_file=nuclear_file if use_tiling else None,
-                    cyto_file=cyto_file if use_tiling else None
-                )
-                masks = stitch_tiles(tile_results, tiles, image_shape, overlap_pixels)
-                
-                all_diams = []
-                for _, _, _, diams, _ in tile_results:
-                    if isinstance(diams, (list, np.ndarray)) and len(diams) > 0:
-                        all_diams.extend(diams if isinstance(diams, list) else diams.tolist())
-                avg_diameter = np.mean(all_diams) if all_diams else None
+                try:
+                    tile_results = process_tiles_with_progress(
+                        model, imgs, tiles, diameter, [0, 1], actual_use_gpu, progress_tracker,
+                        nuclear_file=nuclear_file if use_tiling else None,
+                        cyto_file=cyto_file if use_tiling else None
+                    )
+                    masks = stitch_tiles(tile_results, tiles, image_shape, overlap_pixels)
+                    
+                    all_diams = []
+                    for _, _, _, diams, _ in tile_results:
+                        if isinstance(diams, (list, np.ndarray)) and len(diams) > 0:
+                            all_diams.extend(diams if isinstance(diams, list) else diams.tolist())
+                    avg_diameter = np.mean(all_diams) if all_diams else None
+                except Exception as retry_error:
+                    # Retry also failed - try even smaller tiles or give up
+                    print(f"\n  ❌ Retry with reduced tiles also failed: {retry_error}")
+                    if tile_height > 1024 and tile_width > 1024:
+                        print(f"  Attempting with even smaller tiles (quarter size)...")
+                        tile_height = max(1024, tile_height // 4)
+                        tile_width = max(1024, tile_width // 4)
+                        overlap_pixels = calculate_overlap(min(tile_height, tile_width))
+                        tiles = generate_tiles(image_shape, tile_height, tile_width, overlap_pixels)
+                        print(f"  Final tile size: {tile_height} × {tile_width}, {len(tiles)} tiles")
+                        
+                        progress_tracker = ProgressTracker(len(tiles))
+                        tile_results = process_tiles_with_progress(
+                            model, imgs, tiles, diameter, [0, 1], actual_use_gpu, progress_tracker,
+                            nuclear_file=nuclear_file if use_tiling else None,
+                            cyto_file=cyto_file if use_tiling else None
+                        )
+                        masks = stitch_tiles(tile_results, tiles, image_shape, overlap_pixels)
+                        
+                        all_diams = []
+                        for _, _, _, diams, _ in tile_results:
+                            if isinstance(diams, (list, np.ndarray)) and len(diams) > 0:
+                                all_diams.extend(diams if isinstance(diams, list) else diams.tolist())
+                        avg_diameter = np.mean(all_diams) if all_diams else None
+                    else:
+                        # Tiles are already very small - give up
+                        print(f"  ❌ Cannot reduce tiles further. Current size: {tile_height} × {tile_width}")
+                        print(f"  💡 Suggestions:")
+                        try:
+                            gpu_free = get_current_gpu_memory()
+                            print(f"     - Free GPU memory from other processes (currently {gpu_free:.2f} GB free)")
+                        except:
+                            print(f"     - Free GPU memory from other processes")
+                        print(f"     - Use smaller manual tile size with --tile-size")
+                        print(f"     - Process on CPU instead (--no-gpu)")
+                        raise RuntimeError(f"GPU OOM error persisted even with very small tiles ({tile_height} × {tile_width}). "
+                                         f"Consider freeing memory from other processes or using CPU.")
             else:
                 raise
         
