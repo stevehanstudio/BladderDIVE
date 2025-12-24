@@ -318,6 +318,74 @@ def aggressive_gpu_cleanup():
         pass
 
 
+def wait_for_gpu_memory(required_gb, timeout_seconds=300, check_interval=10, current_pid=None):
+    """
+    Wait for GPU memory to become available, checking if other processes are using it.
+    
+    Parameters:
+    -----------
+    required_gb : float
+        Required GPU memory in GB
+    timeout_seconds : int
+        Maximum time to wait in seconds (default: 5 minutes)
+    check_interval : int
+        Seconds between checks (default: 10)
+    current_pid : int or None
+        Current process PID to exclude from "other processes" check
+    
+    Returns:
+    --------
+    tuple: (success, final_free_gb, waited_seconds)
+        success: bool - True if enough memory became available
+        final_free_gb: float - Final free GPU memory in GB
+        waited_seconds: float - Total time waited
+    """
+    if not TORCH_AVAILABLE or not torch.cuda.is_available():
+        return False, 0.0, 0.0
+    
+    start_time = time.time()
+    last_status_time = start_time
+    status_interval = 30  # Print status every 30 seconds
+    
+    print(f"\n⏳ Waiting for GPU memory to become available...")
+    print(f"   Required: {required_gb:.2f} GB")
+    print(f"   Timeout: {timeout_seconds} seconds")
+    
+    while True:
+        elapsed = time.time() - start_time
+        
+        if elapsed >= timeout_seconds:
+            final_free = get_current_gpu_memory()
+            print(f"\n⏰ Timeout reached ({timeout_seconds}s). Proceeding with available memory.")
+            return False, final_free if final_free else 0.0, elapsed
+        
+        # Check current GPU status
+        status = get_gpu_memory_status()
+        current_free = get_current_gpu_memory()
+        
+        if current_free and current_free >= required_gb:
+            print(f"\n✅ GPU memory available! ({current_free:.2f} GB free)")
+            return True, current_free, elapsed
+        
+        # Print status periodically
+        if time.time() - last_status_time >= status_interval:
+            if status:
+                print(f"\n  ⏳ Still waiting... ({elapsed:.0f}s elapsed)")
+                print(f"     Current free: {status['free_gb']:.2f} GB (need {required_gb:.2f} GB)")
+                if status['processes']:
+                    other_procs = [p for p in status['processes'] 
+                                 if current_pid is None or str(p['pid']) != str(current_pid)]
+                    if other_procs:
+                        print(f"     Other processes using GPU:")
+                        for proc in other_procs:
+                            print(f"       PID {proc['pid']}: {proc['name']} ({proc['memory_gb']:.2f} GB)")
+            else:
+                print(f"  ⏳ Still waiting... ({elapsed:.0f}s elapsed, {current_free:.2f} GB free)")
+            last_status_time = time.time()
+        
+        time.sleep(check_interval)
+
+
 def calculate_tile_size(image_shape, available_memory_gb, channels=2, dtype_size=2, 
                         model_memory_gb=2.0, safety_margin=0.25):
     """
@@ -1259,13 +1327,13 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
     print(f"  Device: {'GPU' if actual_use_gpu else 'CPU'}")
     
     try:
-        model = models.CellposeModel(gpu=actual_use_gpu, model_type=model_type)
+        model = models.CellposeModel(gpu=actual_use_gpu)
     except Exception as e:
         if actual_use_gpu:
             print(f"⚠️  GPU initialization failed: {e}")
             print(f"  Falling back to CPU...")
             actual_use_gpu = False
-            model = models.CellposeModel(gpu=False, model_type=model_type)
+            model = models.CellposeModel(gpu=False)
         else:
             raise
     
@@ -1307,30 +1375,64 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
                 tile_memory_gb = (tile_pixels * 2 * 2 * 5) / (1024**3)  # channels * dtype * overhead
                 
                 if current_gpu_free < tile_memory_gb * 1.5:  # Need at least 1.5x tile size free
-                    print(f"\n⚠️  WARNING: GPU memory is low ({current_gpu_free:.2f} GB free)")
-                    print(f"  Estimated {tile_memory_gb:.2f} GB needed per tile")
-                    print(f"  Other processes may be using GPU memory")
+                    # Check if other processes are using significant GPU memory
+                    status = get_gpu_memory_status()
+                    other_processes_using_gpu = False
+                    if status and status['processes']:
+                        import os
+                        current_pid = os.getpid()
+                        other_procs = [p for p in status['processes'] 
+                                     if str(p['pid']) != str(current_pid)]
+                        if other_procs:
+                            total_other_memory = sum(p['memory_gb'] for p in other_procs)
+                            if total_other_memory > 1.0:  # More than 1 GB used by others
+                                other_processes_using_gpu = True
                     
-                    # Try to reduce tile size if possible
-                    if tile_height > 4096 and tile_width > 4096:
+                    if other_processes_using_gpu:
+                        # Wait for other processes to free memory
+                        print(f"\n⚠️  GPU memory is low ({current_gpu_free:.2f} GB free)")
+                        print(f"  Estimated {tile_memory_gb:.2f} GB needed per tile")
+                        print(f"  Other processes are using GPU memory")
+                        
+                        # Wait for memory (default 5 minutes timeout)
+                        import os
+                        success, final_free, waited = wait_for_gpu_memory(
+                            required_gb=tile_memory_gb * 1.5,
+                            timeout_seconds=300,
+                            current_pid=os.getpid()
+                        )
+                        
+                        if success:
+                            print(f"  ✅ Proceeding with original tile size")
+                            # Keep original tile size
+                        else:
+                            # Still not enough after waiting - reduce tile size
+                            print(f"  ⚠️  Still insufficient memory after waiting ({final_free:.2f} GB free)")
+                            print(f"  🔄 Reducing tile size to fit available memory...")
+                            reduction_factor = min(2, (final_free / tile_memory_gb) * 0.8)
+                            tile_height = max(2048, int(tile_height / reduction_factor))
+                            tile_width = max(2048, int(tile_width / reduction_factor))
+                            tile_height = (tile_height // 256) * 256
+                            tile_width = (tile_width // 256) * 256
+                            
+                            overlap_pixels = calculate_overlap(min(tile_height, tile_width))
+                            tiles = generate_tiles(image_shape, tile_height, tile_width, overlap_pixels)
+                            num_tiles = len(tiles)
+                            print(f"  ✅ Reduced to {tile_height} × {tile_width} pixels, {num_tiles} tiles")
+                    else:
+                        # No other processes - just reduce tile size immediately
+                        print(f"\n⚠️  GPU memory is low ({current_gpu_free:.2f} GB free)")
                         print(f"  🔄 Reducing tile size to fit available memory...")
                         reduction_factor = min(2, (current_gpu_free / tile_memory_gb) * 0.8)
                         tile_height = max(2048, int(tile_height / reduction_factor))
                         tile_width = max(2048, int(tile_width / reduction_factor))
-                        # Round to multiples of 256
                         tile_height = (tile_height // 256) * 256
                         tile_width = (tile_width // 256) * 256
                         
-                        # Recalculate overlap and tiles
                         overlap_pixels = calculate_overlap(min(tile_height, tile_width))
                         tiles = generate_tiles(image_shape, tile_height, tile_width, overlap_pixels)
                         num_tiles = len(tiles)
                         print(f"  ✅ Reduced to {tile_height} × {tile_width} pixels, {num_tiles} tiles")
-                    else:
-                        print(f"  ⚠️  Tile size already small - may fail with OOM errors")
-                        print(f"  💡 Consider: Set PYTORCH_ALLOC_CONF=expandable_segments:True")
-                        print(f"  💡 Or: Wait for other GPU processes to finish")
-                        print(f"  💡 Or: Use CPU instead (remove --gpu flag)")
         
         # Process all tiles with progress tracking
         print(f"\n🔄 Processing {num_tiles} tiles...")
@@ -1429,7 +1531,7 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
                 print(f"  Falling back to CPU with tiling...")
                 actual_use_gpu = False
                 use_tiling = True
-                model = models.CellposeModel(gpu=False, model_type=model_type)
+                model = models.CellposeModel(gpu=False)
                 
                 # Recalculate with CPU
                 tile_height, tile_width = calculate_tile_size(
