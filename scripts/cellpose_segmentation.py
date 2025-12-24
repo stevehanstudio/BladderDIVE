@@ -167,6 +167,88 @@ def get_current_gpu_memory():
     return None
 
 
+def get_gpu_memory_status():
+    """
+    Get detailed GPU memory status including usage by other processes.
+    
+    Returns:
+    --------
+    dict or None: Dictionary with GPU memory info, or None if not available
+        Keys: 'total_gb', 'free_gb', 'used_gb', 'processes' (list of dicts with pid, name, memory_gb)
+    """
+    try:
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=memory.total,memory.free,memory.used', 
+             '--format=csv,nounits,noheader'],
+            capture_output=True,
+            text=True,
+            timeout=3
+        )
+        if result.returncode == 0:
+            line = result.stdout.strip().split('\n')[0]
+            total_mb, free_mb, used_mb = map(float, line.split(', '))
+            
+            # Get process info
+            processes = []
+            try:
+                proc_result = subprocess.run(
+                    ['nvidia-smi', '--query-compute-apps=pid,process_name,used_memory', 
+                     '--format=csv,nounits,noheader'],
+                    capture_output=True,
+                    text=True,
+                    timeout=3
+                )
+                if proc_result.returncode == 0:
+                    for proc_line in proc_result.stdout.strip().split('\n'):
+                        if proc_line.strip():
+                            parts = proc_line.split(', ')
+                            if len(parts) >= 3:
+                                pid, name, mem_mb = parts[0], parts[1], parts[2]
+                                try:
+                                    processes.append({
+                                        'pid': pid,
+                                        'name': name,
+                                        'memory_gb': float(mem_mb) / 1024
+                                    })
+                                except ValueError:
+                                    pass
+            except Exception:
+                pass
+            
+            return {
+                'total_gb': total_mb / 1024,
+                'free_gb': free_mb / 1024,
+                'used_gb': used_mb / 1024,
+                'processes': processes
+            }
+    except Exception:
+        pass
+    
+    return None
+
+
+def print_gpu_status():
+    """Print current GPU memory status."""
+    status = get_gpu_memory_status()
+    if status:
+        print(f"\n  📊 GPU Memory Status:")
+        print(f"     Total: {status['total_gb']:.2f} GB")
+        print(f"     Free:  {status['free_gb']:.2f} GB")
+        print(f"     Used:  {status['used_gb']:.2f} GB ({status['used_gb']/status['total_gb']*100:.1f}%)")
+        
+        if status['processes']:
+            print(f"     Processes using GPU:")
+            for proc in status['processes']:
+                print(f"       PID {proc['pid']}: {proc['name']} ({proc['memory_gb']:.2f} GB)")
+        else:
+            print(f"     No other processes detected")
+    else:
+        # Fallback to simple check
+        gpu_free = get_current_gpu_memory()
+        if gpu_free is not None:
+            print(f"\n  📊 GPU Memory: {gpu_free:.2f} GB free")
+
+
 def clear_gpu_cache():
     """Clear PyTorch GPU cache if available."""
     if TORCH_AVAILABLE and torch.cuda.is_available():
@@ -782,6 +864,11 @@ def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu,
     # Debug: Track memory usage
     debug_mode = os.environ.get('CELLPOSE_DEBUG', '0') == '1'
     
+    # GPU status monitoring
+    last_gpu_status_time = time.time()
+    gpu_status_interval = 30  # Print GPU status every 30 seconds
+    gpu_status_tile_interval = 5  # Also print every 5 tiles
+    
     for i, (y_start, y_end, x_start, x_end) in enumerate(tiles):
         tile_start = time.time()
         
@@ -842,9 +929,13 @@ def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu,
                 # Re-check allocation
                 if not check_gpu_allocation_possible(estimated_needed_mb):
                     print(f"  ⚠️  Fragmentation persists - may fail during processing")
-                    print(f"  💡 Tip: Set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to reduce fragmentation")
+                    print(f"  💡 Tip: Set PYTORCH_ALLOC_CONF=expandable_segments:True to reduce fragmentation")
         
         # Process tile
+        # Print status for first tile (which can take longer due to model warmup)
+        if i == 0:
+            print(f"\n  🚀 Starting tile 1/{num_tiles} (first tile may take longer due to model initialization)...")
+        
         try:
             result = process_tile(model, img_tile, (y_start, y_end, x_start, x_end), 
                                 diameter, channels, use_gpu)
@@ -870,6 +961,17 @@ def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu,
             # Clear GPU cache after each tile (if using GPU)
             if use_gpu:
                 clear_gpu_cache()
+                
+                # Print GPU status periodically
+                current_time = time.time()
+                should_print_status = (
+                    (i + 1) % gpu_status_tile_interval == 0 or  # Every N tiles
+                    (current_time - last_gpu_status_time) >= gpu_status_interval  # Every N seconds
+                )
+                
+                if should_print_status:
+                    print_gpu_status()
+                    last_gpu_status_time = current_time
             
             # Debug: Check memory after cleanup
             if debug_mode:
@@ -951,7 +1053,7 @@ def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu,
                         print(f"\n  ❌ All {max_retries} retry attempts failed")
                         print(f"  💡 Suggestions:")
                         print(f"     - Use smaller tile size (current tile: {current_tile_height} × {current_tile_width})")
-                        print(f"     - Set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True")
+                        print(f"     - Set PYTORCH_ALLOC_CONF=expandable_segments:True")
                         print(f"     - Process on CPU instead (remove --gpu flag)")
                         print(f"     - Free GPU memory from other processes")
                         raise RuntimeError(f"GPU OOM error persisted after {max_retries} retry attempts. "
@@ -1195,6 +1297,40 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
         tiles = generate_tiles(image_shape, tile_height, tile_width, overlap_pixels)
         num_tiles = len(tiles)
         print(f"  Generated {num_tiles} tiles")
+        
+        # Check GPU memory one more time before processing (in case other processes started)
+        if actual_use_gpu:
+            current_gpu_free = get_current_gpu_memory()
+            if current_gpu_free is not None:
+                # Estimate memory needed per tile (rough: tile size * 5x overhead)
+                tile_pixels = tile_height * tile_width
+                tile_memory_gb = (tile_pixels * 2 * 2 * 5) / (1024**3)  # channels * dtype * overhead
+                
+                if current_gpu_free < tile_memory_gb * 1.5:  # Need at least 1.5x tile size free
+                    print(f"\n⚠️  WARNING: GPU memory is low ({current_gpu_free:.2f} GB free)")
+                    print(f"  Estimated {tile_memory_gb:.2f} GB needed per tile")
+                    print(f"  Other processes may be using GPU memory")
+                    
+                    # Try to reduce tile size if possible
+                    if tile_height > 4096 and tile_width > 4096:
+                        print(f"  🔄 Reducing tile size to fit available memory...")
+                        reduction_factor = min(2, (current_gpu_free / tile_memory_gb) * 0.8)
+                        tile_height = max(2048, int(tile_height / reduction_factor))
+                        tile_width = max(2048, int(tile_width / reduction_factor))
+                        # Round to multiples of 256
+                        tile_height = (tile_height // 256) * 256
+                        tile_width = (tile_width // 256) * 256
+                        
+                        # Recalculate overlap and tiles
+                        overlap_pixels = calculate_overlap(min(tile_height, tile_width))
+                        tiles = generate_tiles(image_shape, tile_height, tile_width, overlap_pixels)
+                        num_tiles = len(tiles)
+                        print(f"  ✅ Reduced to {tile_height} × {tile_width} pixels, {num_tiles} tiles")
+                    else:
+                        print(f"  ⚠️  Tile size already small - may fail with OOM errors")
+                        print(f"  💡 Consider: Set PYTORCH_ALLOC_CONF=expandable_segments:True")
+                        print(f"  💡 Or: Wait for other GPU processes to finish")
+                        print(f"  💡 Or: Use CPU instead (remove --gpu flag)")
         
         # Process all tiles with progress tracking
         print(f"\n🔄 Processing {num_tiles} tiles...")
