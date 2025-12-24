@@ -1462,12 +1462,59 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
             
         except Exception as e:
             print(f"\n❌ Error during tiled processing: {e}")
+            error_str = str(e)
+            is_gpu_oom = ("CUDA out of memory" in error_str or 
+                         "out of memory" in error_str.lower() or
+                         "GPU OOM" in error_str)
+            
             # Try with smaller tiles as fallback
             if tile_height > 512 and tile_width > 512:
                 print(f"  Attempting fallback with smaller tiles...")
-                tile_height = tile_height // 2
-                tile_width = tile_width // 2
-                overlap_pixels = overlap_pixels // 2
+                
+                # If GPU OOM, calculate tile size based on available memory
+                if is_gpu_oom and actual_use_gpu:
+                    try:
+                        clear_gpu_cache()
+                        current_gpu_free = get_current_gpu_memory()
+                        print(f"  Current GPU memory: {current_gpu_free:.2f} GB free")
+                        
+                        if current_gpu_free > 0.1:  # At least 100 MB available
+                            # Calculate tile size based on available memory
+                            # Reserve some memory for model and overhead
+                            memory_for_tiling = max(0.5, current_gpu_free * 0.6)  # Use 60% of free memory
+                            new_tile_height, new_tile_width = calculate_tile_size(
+                                image_shape, memory_for_tiling, channels=2, 
+                                dtype_size=dtype_size, model_memory_gb=model_memory_gb
+                            )
+                            
+                            # Ensure new tiles are smaller than current
+                            if new_tile_height < tile_height and new_tile_width < tile_width:
+                                tile_height = new_tile_height
+                                tile_width = new_tile_width
+                                print(f"  Calculated tile size based on available GPU memory: "
+                                      f"{tile_height} × {tile_width} pixels")
+                            else:
+                                # Fallback to halving
+                                tile_height = tile_height // 2
+                                tile_width = tile_width // 2
+                                print(f"  Reduced tile size by half: {tile_height} × {tile_width} pixels")
+                        else:
+                            # Very little memory - reduce aggressively
+                            tile_height = max(2048, tile_height // 4)
+                            tile_width = max(2048, tile_width // 4)
+                            print(f"  Aggressively reduced tile size: {tile_height} × {tile_width} pixels")
+                    except Exception as mem_err:
+                        print(f"  ⚠️  Could not get GPU memory info: {mem_err}")
+                        # Fallback to halving
+                        tile_height = tile_height // 2
+                        tile_width = tile_width // 2
+                else:
+                    # Not GPU OOM or not using GPU - just halve
+                    tile_height = tile_height // 2
+                    tile_width = tile_width // 2
+                
+                # Recalculate overlap
+                overlap_pixels = calculate_overlap(min(tile_height, tile_width))
                 tiles = generate_tiles(image_shape, tile_height, tile_width, overlap_pixels)
                 print(f"  New tile size: {tile_height} × {tile_width}, {len(tiles)} tiles")
                 
