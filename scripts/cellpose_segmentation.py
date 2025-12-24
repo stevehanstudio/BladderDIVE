@@ -1055,7 +1055,7 @@ def process_tiles_with_progress(model, imgs, tiles, diameter, channels, use_gpu,
                 
                 # Try multiple retry strategies for GPU OOM
                 if use_gpu:
-                    max_retries = 3
+                    max_retries = 5  # Increased from 3 to give more chances with cleanup
                     retry_successful = False
                     
                     for retry_attempt in range(1, max_retries + 1):
@@ -1478,31 +1478,43 @@ def run_segmentation(nuclear_file, cyto_file, output_dir='output', use_gpu=False
                         current_gpu_free = get_current_gpu_memory()
                         print(f"  Current GPU memory: {current_gpu_free:.2f} GB free")
                         
-                        if current_gpu_free > 0.1:  # At least 100 MB available
+                        if current_gpu_free > 0.5:  # At least 500 MB available
                             # Calculate tile size based on available memory
                             # Reserve some memory for model and overhead
-                            memory_for_tiling = max(0.5, current_gpu_free * 0.6)  # Use 60% of free memory
+                            # Use more conservative calculation since OOM occurred despite retries
+                            memory_for_tiling = current_gpu_free * 0.4  # Use 40% of free memory (very conservative due to fragmentation)
                             new_tile_height, new_tile_width = calculate_tile_size(
                                 image_shape, memory_for_tiling, channels=2, 
                                 dtype_size=dtype_size, model_memory_gb=model_memory_gb
                             )
                             
-                            # Ensure new tiles are smaller than current
-                            if new_tile_height < tile_height and new_tile_width < tile_width:
+                            # Ensure new tiles are significantly smaller than current (at least 50% reduction)
+                            # This accounts for memory fragmentation
+                            if new_tile_height < tile_height * 0.5 and new_tile_width < tile_width * 0.5:
                                 tile_height = new_tile_height
                                 tile_width = new_tile_width
                                 print(f"  Calculated tile size based on available GPU memory: "
                                       f"{tile_height} × {tile_width} pixels")
                             else:
-                                # Fallback to halving
-                                tile_height = tile_height // 2
-                                tile_width = tile_width // 2
-                                print(f"  Reduced tile size by half: {tile_height} × {tile_width} pixels")
-                        else:
-                            # Very little memory - reduce aggressively
+                                # Force at least 50% reduction to account for fragmentation
+                                tile_height = max(2048, int(tile_height * 0.4))
+                                tile_width = max(2048, int(tile_width * 0.4))
+                                tile_height = (tile_height // 256) * 256  # Round to 256
+                                tile_width = (tile_width // 256) * 256
+                                print(f"  Reduced tile size by 60% to account for fragmentation: "
+                                      f"{tile_height} × {tile_width} pixels")
+                        elif current_gpu_free > 0.1:  # 100-500 MB available
+                            # Very low memory - reduce aggressively
+                            print(f"  ⚠️  Very low GPU memory ({current_gpu_free:.2f} GB) - reducing tiles aggressively")
                             tile_height = max(2048, tile_height // 4)
                             tile_width = max(2048, tile_width // 4)
                             print(f"  Aggressively reduced tile size: {tile_height} × {tile_width} pixels")
+                        else:
+                            # Extremely low memory (< 100 MB) - reduce very aggressively
+                            print(f"  ⚠️  Extremely low GPU memory ({current_gpu_free:.2f} GB) - reducing tiles very aggressively")
+                            tile_height = max(1024, tile_height // 8)
+                            tile_width = max(1024, tile_width // 8)
+                            print(f"  Very aggressively reduced tile size: {tile_height} × {tile_width} pixels")
                     except Exception as mem_err:
                         print(f"  ⚠️  Could not get GPU memory info: {mem_err}")
                         # Fallback to halving
