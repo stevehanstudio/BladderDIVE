@@ -74,6 +74,14 @@ spatial_plots/
 plots/
 figures/
 
+# Project structure: raw/, data/, output/ (see README)
+# raw/   - original SVS, aivia TIFF (untracked)
+# data/  - zarr, downsampled HE, registration outputs (untracked)
+# output/ - cellpose_output, channel_analysis_output, he_registration_output, registration_intermediate
+raw/
+data/
+output/
+
 # =============================================================================
 # BIOINFORMATICS & DATA SCIENCE FILES
 # =============================================================================
@@ -135,6 +143,7 @@ MANIFEST
 # Jupyter Notebook
 .ipynb_checkpoints
 *.ipynb
+!notebooks/*.ipynb
 
 # IPython
 profile_default/
@@ -302,6 +311,19 @@ site/
 # =============================================================================
 # CUSTOM PROJECT EXCLUSIONS
 # =============================================================================
+
+# Zarr stores (large imaging data)
+*.zarr/
+CellDIVE_*.zarr/
+
+# Cellpose and analysis outputs
+cellpose_output/
+channel_analysis_output/
+he_registration_output/
+
+# AI tool config files
+.clinerules
+.aider*
 
 # Large reference datasets (keep small test datasets)
 reference_data/
