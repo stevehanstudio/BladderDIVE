@@ -1,0 +1,24 @@
+# Conda environment for H&E Computational Pathology (WSI adaptation)
+# Create with: conda env create -f envs/comp_path_workshop.yaml -n comp_path_workshop
+
+name: comp_path_workshop
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy<2.0
+  - scipy
+  - scikit-image
+  - scikit-learn
+  - pandas
+  - matplotlib
+  - opencv
+  - tqdm
+  - openslide-python
+  - openslide
+  - pip
+  - pip:
+    - cellpose>=2.0
+    - mahotas
+    - tifffile

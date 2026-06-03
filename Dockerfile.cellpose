@@ -1,0 +1,19 @@
+# Dockerfile for Cellpose with NVIDIA PyTorch
+# Optimized for GB10 GPU (ARM64)
+
+FROM nvcr.io/nvidia/pytorch:25.12-py3
+
+# Install Cellpose and dependencies
+RUN pip install --no-cache-dir \
+    cellpose>=4.0 \
+    tifffile \
+    psutil \
+    fastremap \
+    natsort \
+    tqdm
+
+# Set working directory
+WORKDIR /workspace
+
+# Default command
+CMD ["bash"]

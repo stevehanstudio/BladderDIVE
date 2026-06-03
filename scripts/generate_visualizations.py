@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """
-Generate visualizations for CellDIVE analysis
+Generate visualizations for CellDIVE analysis.
+
+This script creates various plots and visualizations from cell typing and
+spatial analysis results, including:
+
+- UMAP plots colored by cell types and marker expression
+- Marker expression heatmaps by cell type
+- Cell-cell interaction networks
+- Spatial distribution plots
+
+Designed for use with Snakemake workflow (expects snakemake.input/output).
 """
 
 import pandas as pd
@@ -15,7 +25,14 @@ plt.style.use('default')
 sns.set_palette("husl")
 
 def load_data():
-    """Load analysis results"""
+    """
+    Load analysis results from CSV files.
+    
+    Returns
+    -------
+    tuple
+        (analysis, clusters, umap_coords, interactions) DataFrames
+    """
     analysis = pd.read_csv(snakemake.input.analysis)
     clusters = pd.read_csv(snakemake.input.clusters)
     umap_coords = pd.read_csv(snakemake.input.umap_coords)
@@ -24,7 +41,20 @@ def load_data():
     return analysis, clusters, umap_coords, interactions
 
 def plot_umap(analysis, clusters, umap_coords, output_path):
-    """Generate UMAP plot colored by cell types"""
+    """
+    Generate UMAP plot colored by cell types and marker expression.
+    
+    Parameters
+    ----------
+    analysis : pd.DataFrame
+        Cell analysis results with marker expression
+    clusters : pd.DataFrame
+        Cell type cluster assignments
+    umap_coords : pd.DataFrame
+        UMAP embedding coordinates
+    output_path : str or Path
+        Output path for the plot
+    """
     
     # Merge data
     plot_data = analysis.merge(clusters, left_index=True, right_index=True)
@@ -69,7 +99,18 @@ def plot_umap(analysis, clusters, umap_coords, output_path):
     plt.close()
 
 def plot_markers_heatmap(analysis, clusters, output_path):
-    """Generate marker expression heatmap by cell type"""
+    """
+    Generate marker expression heatmap by cell type.
+    
+    Parameters
+    ----------
+    analysis : pd.DataFrame
+        Cell analysis results with marker expression
+    clusters : pd.DataFrame
+        Cell type cluster assignments
+    output_path : str or Path
+        Output path for the heatmap plot
+    """
     
     # Merge data
     plot_data = analysis.merge(clusters, left_index=True, right_index=True)
@@ -93,7 +134,16 @@ def plot_markers_heatmap(analysis, clusters, output_path):
     plt.close()
 
 def plot_interaction_network(interactions, output_path):
-    """Generate cell-cell interaction network plot"""
+    """
+    Generate cell-cell interaction network plot.
+    
+    Parameters
+    ----------
+    interactions : pd.DataFrame
+        Cell-cell interaction scores
+    output_path : str or Path
+        Output path for the network plot
+    """
     
     # Create interaction matrix
     cell_types = list(set(interactions['cell_type_1'].tolist() + 
@@ -117,7 +167,18 @@ def plot_interaction_network(interactions, output_path):
     plt.close()
 
 def plot_spatial_distribution(analysis, clusters, output_path):
-    """Generate spatial distribution plot"""
+    """
+    Generate spatial distribution plot of cell types.
+    
+    Parameters
+    ----------
+    analysis : pd.DataFrame
+        Cell analysis results with spatial coordinates
+    clusters : pd.DataFrame
+        Cell type cluster assignments
+    output_path : str or Path
+        Output path for the spatial plot
+    """
     
     # Merge data
     plot_data = analysis.merge(clusters, left_index=True, right_index=True)

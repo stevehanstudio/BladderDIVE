@@ -1,0 +1,45 @@
+name: cellpose_arm64
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia
+dependencies:
+  # Python - use 3.10 for better compatibility
+  - python=3.10
+  
+  # Core scientific computing
+  - numpy<2.0
+  - scipy
+  - scikit-image
+  - matplotlib
+  - pandas
+  
+  # Image I/O
+  - tifffile
+  - imageio
+  - pillow
+  
+  # System utilities
+  - psutil
+  
+  # GPU monitoring (optional, may not be available on ARM)
+  - pip
+  
+  # Install PyTorch and Cellpose via pip for better ARM64/CUDA compatibility
+  - pip:
+    # PyTorch - try to get ARM64 CUDA build if available
+    # Note: PyTorch ARM64 CUDA support is limited
+    # If CUDA doesn't work, this will fall back to CPU
+    - torch>=2.0.0
+    - torchvision>=0.15.0
+    
+    # Cellpose and dependencies
+    - cellpose>=2.0
+    
+    # GPU monitoring (optional)
+    - nvidia-ml-py
+    
+    # Additional dependencies that might be needed
+    - fastremap
+    - natsort
+    - tqdm

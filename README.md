@@ -18,6 +18,7 @@ A comprehensive Snakemake pipeline for analyzing 23-channel CellDIVE multiplexed
 - [Outputs](#outputs)
 - [Configuration](#configuration)
 - [QuPath Integration](#qupath-integration)
+- [Napari Integration](#napari-integration)
 - [Troubleshooting](#troubleshooting)
 - [Citation](#citation)
 
@@ -36,12 +37,14 @@ BladderDIVE is a specialized analysis pipeline for CellDIVE multiplexed immunofl
 
 ### 🧬 Marker Panel (23 Channels)
 
-| **Immune Markers** | **Epithelial/Structural** | **Stromal/Vascular** | **Functional** |
-|-------------------|---------------------------|---------------------|----------------|
-| CD45, CD3E, CD8a | PANCK, EPCAM | VIM, COL1A1 | Ki67, CD44 |
-| CD20, CD38 | | ACTA2, CD31 | HLADR |
-| CD68, CD163, CD14 | | PDGFRA | |
-| CD11c, CD45RO, CD56 | | | |
+
+| **Immune Markers**  | **Epithelial/Structural** | **Stromal/Vascular** | **Functional** |
+| ------------------- | ------------------------- | -------------------- | -------------- |
+| CD45, CD3E, CD8a    | PANCK, EPCAM              | VIM, COL1A1          | Ki67, CD44     |
+| CD20, CD38          |                           | ACTA2, CD31          | HLADR          |
+| CD68, CD163, CD14   |                           | PDGFRA               |                |
+| CD11c, CD45RO, CD56 |                           |                      |                |
+
 
 ---
 
@@ -53,6 +56,7 @@ BladderDIVE is a specialized analysis pipeline for CellDIVE multiplexed immunofl
 - 🗺️ **Spatial Analysis**: Neighborhood analysis and tissue architecture mapping
 - 📈 **Rich Visualizations**: Interactive plots, heatmaps, and spatial maps
 - 🎯 **QuPath Integration**: Export results for interactive pathology review
+- 🔬 **Napari Integration**: Interactive visualization of raw channels, masks, and H&E overlay
 - ⚡ **Scalable Pipeline**: Snakemake workflow with conda environment management
 - 📋 **Quality Control**: Comprehensive QC reports and validation metrics
 
@@ -61,7 +65,7 @@ BladderDIVE is a specialized analysis pipeline for CellDIVE multiplexed immunofl
 ## 🏗️ Pipeline Architecture
 
 ```mermaid
-flowchart TD
+segmentationflowchart TD
     A[📁 23-Channel TIFs] --> B[🔬 segmentation]
     B --> C[📊 analysis]
     C --> D[🏷️ cell_typing]
@@ -79,6 +83,8 @@ flowchart TD
     class B,C,D,E,F,G,H,I,J coreStage
 ```
 
+
+
 ---
 
 ## 🛠️ Installation
@@ -86,26 +92,31 @@ flowchart TD
 ### Prerequisites
 
 - **Python 3.9+**
-- **Conda/Mamba** package manager
+- **Conda/Mamba** package manager (or **Miniforge** for ARM64 systems)
 - **Git** for version control
 - **16+ GB RAM** (recommended for large images)
 - **GPU support** (optional, for faster StarDist inference)
 
+> **Note for ARM64 users**: On ARM-based systems (e.g., MSI Edgexpert), use Miniforge instead of Anaconda and install packages via `pip` where conda-forge builds are unavailable.
+
 ### Setup
 
 1. **Clone the repository**
+
 ```bash
 git clone https://github.com/yourusername/BladderDIVE.git
 cd BladderDIVE
 ```
 
-2. **Create Snakemake environment**
+1. **Create Snakemake environment**
+
 ```bash
 conda create -n snakemake_env snakemake mamba -c conda-forge -c bioconda
 conda activate snakemake_env
 ```
 
-3. **Install PIPEX dependencies**
+1. **Install PIPEX dependencies**
+
 ```bash
 # Clone PIPEX repository (if not already available)
 git clone https://github.com/engjen/PIPEX.git
@@ -132,6 +143,7 @@ cd input/
 ### 2. Configure the Pipeline
 
 Edit `config.yaml`:
+
 ```yaml
 # Sample configuration
 nuclei_diameter: 20
@@ -161,22 +173,28 @@ snakemake analysis --cores 4 --use-conda
 
 ### Input Files
 
-| File Type | Description | Example |
-|-----------|-------------|---------|
-| **Channel TIFs** | 23 individual channel images | `DAPI.tif`, `CD45.tif`, etc. |
-| **config.yaml** | Pipeline configuration | Segmentation parameters |
-| **cell_types.csv** | Cell type definitions | Marker expression profiles |
-| **Aperio XML** *(optional)* | Pathologist annotations | `annotations.xml` |
+
+| File Type                   | Description                  | Example                      |
+| --------------------------- | ---------------------------- | ---------------------------- |
+| **Channel TIFs**            | 23 individual channel images | `DAPI.tif`, `CD45.tif`, etc. |
+| **config.yaml**             | Pipeline configuration       | Segmentation parameters      |
+| **cell_types.csv**          | Cell type definitions        | Marker expression profiles   |
+| **Aperio XML** *(optional)* | Pathologist annotations      | `annotations.xml`            |
+
 
 ### File Structure
+
 ```
 BladderDIVE/
-├── input/                    # Input channel TIFs
+├── data/                    # Zarr stores, downsampled images
 ├── config.yaml              # Pipeline configuration
 ├── cell_types.csv           # Cell type definitions
 ├── envs/                    # Conda environments
-├── Snakefile               # Pipeline definition
-└── README.md               # This file
+├── scripts/                 # Analysis, visualization, export scripts
+├── qupath_import/           # QuPath Groovy import scripts
+├── Snakefile                # Pipeline definition
+├── CONTEST_EXPORT.md        # Biographic contest export guide
+└── README.md                # This file
 ```
 
 ---
@@ -184,48 +202,56 @@ BladderDIVE/
 ## 🔬 Pipeline Stages
 
 ### Stage 1: Cell Segmentation (`segmentation`)
+
 - **Input**: 23-channel TIF images
 - **Process**: StarDist nuclei detection + membrane refinement
 - **Output**: Cell masks, measurements, QC images
 - **Time**: ~2-4 hours (depends on image size)
 
 ### Stage 2: Single-Cell Analysis (`analysis`)
+
 - **Input**: Segmentation results
 - **Process**: Normalization, UMAP, clustering, interactions
 - **Output**: Analysis matrix, cluster assignments, coordinates
 - **Time**: ~30-60 minutes
 
 ### Stage 3: Cell Type Annotation (`cell_typing`)
+
 - **Input**: Clusters + marker definitions
 - **Process**: Marker-based cell type assignment
 - **Output**: Refined cell type classifications
 - **Time**: ~15-30 minutes
 
 ### Stage 4: Visualizations (`visualizations`)
+
 - **Input**: Analysis results
 - **Process**: Generate plots and heatmaps
 - **Output**: UMAP plots, marker heatmaps, spatial maps
 - **Time**: ~15-30 minutes
 
 ### Stage 5: QuPath Integration (`qupath_export`)
+
 - **Input**: Segmentation + cell types
 - **Process**: Convert to QuPath format
 - **Output**: GeoJSON annotations, measurements
 - **Time**: ~10-15 minutes
 
 ### Stage 6: Spatial Analysis (`spatial_analysis`)
+
 - **Input**: Cell locations + types
 - **Process**: Neighborhood analysis, spatial statistics
 - **Output**: Spatial metrics, interaction networks
 - **Time**: ~30-45 minutes
 
 ### Stage 7: Quality Control (`quality_control`)
+
 - **Input**: All pipeline outputs
 - **Process**: Validation and QC metrics
 - **Output**: QC report, diagnostic plots
 - **Time**: ~15-30 minutes
 
 ### Stage 8: Report Generation (`generate_report`)
+
 - **Input**: All analysis results
 - **Process**: Compile comprehensive HTML report
 - **Output**: Final analysis report
@@ -237,16 +263,32 @@ BladderDIVE/
 
 ### Key Output Files
 
-| File | Description |
-|------|-------------|
-| `segmentation_mask.npy` | Cell instance segmentation masks |
-| `measurements.csv` | Single-cell marker intensities |
-| `analysis.csv` | Processed single-cell data matrix |
-| `clusters_refined.csv` | Final cell type assignments |
-| `umap_coordinates.csv` | UMAP embedding coordinates |
-| `spatial_statistics.csv` | Spatial analysis metrics |
-| `qupath_annotations.geojson` | QuPath-compatible annotations |
-| `analysis_report.html` | Comprehensive analysis report |
+
+| File                         | Description                       |
+| ---------------------------- | --------------------------------- |
+| `segmentation_mask.npy`      | Cell instance segmentation masks  |
+| `measurements.csv`           | Single-cell marker intensities    |
+| `analysis.csv`               | Processed single-cell data matrix |
+| `clusters_refined.csv`       | Final cell type assignments       |
+| `umap_coordinates.csv`       | UMAP embedding coordinates        |
+| `spatial_statistics.csv`     | Spatial analysis metrics          |
+| `qupath_annotations.geojson` | QuPath-compatible annotations     |
+| `analysis_report.html`       | Comprehensive analysis report     |
+
+
+### UCSF BioGraphic Image Contest 2026
+
+Five multi-channel composites were produced for the [UCSF BioGraphic Image Contest](https://www.ucsf.edu/biographic) using `scripts/export_biographic_contest_composites.py`. Each composite blends 4-5 fluorescence channels from the 23-channel CellDIVE dataset with custom colors, gamma, opacity, and blending modes (additive, screen, max-intensity).
+
+| Composite | Key Markers | Color Theme |
+|-----------|-------------|-------------|
+| **Immune Surveillance** | CD8a, CD68, CD163 | Blue + yellow + green |
+| **Invasive Front** | PANCK, VIM, ACTA2, Ki67 | Yellow-green + blue + teal + gold |
+| **Vascular Architecture** | CD31, COL1A1, PDGFRA | Cyan + orange + red |
+| **Proliferation Zone** | Ki67, PANCK, CD44 | Chartreuse + blue + pink |
+| **Tertiary Lymphoid Structures** | CD20, CD3E, CD38, PANCK | Green + blue + yellow |
+
+See **[CONTEST_EXPORT.md](CONTEST_EXPORT.md)** for full export options, gamma/opacity tuning, and blending guide.
 
 ### Expected Cell Types
 
@@ -302,17 +344,77 @@ The pipeline uses specialized conda environments for each stage:
 
 1. **Load your original image** (`.svs` file) in QuPath
 2. **Import segmentation results**:
-   ```
+  ```
    File > Import objects > From file
    Select: qupath_annotations.geojson
-   ```
+  ```
 3. **Load pathologist annotations** (if available):
-   - Use the provided Groovy scripts in `qupath_import/`
-   - Run batch scripts: `batch_01_regions_01_10.groovy` through `batch_06_regions_51_52.groovy`
+  - Use the provided Groovy scripts in `qupath_import/`
+  - Run batch scripts: `batch_01_regions_01_10.groovy` through `batch_06_regions_51_52.groovy`
 
 ### Combining Automated + Manual Annotations
 
 The pipeline generates **cell-level annotations** that complement **pathologist region annotations**, providing multi-scale tissue analysis.
+
+---
+
+## 🔬 Napari Integration
+
+[Napari](https://napari.org/) provides interactive visualization of CellDIVE images, segmentation masks, and analysis results. Use it to explore multi-channel fluorescence data, compare Cellpose outputs, and overlay H&E with multiplexed markers.
+
+### Setup
+
+```bash
+# Create Napari environment (conda or pip)
+conda create -n napari-env -c conda-forge napari pyqt zarr dask tifffile
+conda activate napari-env
+```
+
+> **Note for ARM64 / GPU users**: On ARM64 systems (e.g., MSI Edgexpert) or when GPU acceleration is needed, you may run Napari inside an [Nvidia NGC container](https://catalog.ngc.nvidia.com/).
+
+### Load Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `napari_load_raw+mask.py` | Raw CellDIVE Zarr + Cellpose segmentation masks (outline-only) |
+| `napari_load_raw+mask_HE.py` | Same as above + optional H&E overlay (pre-registered or manual) |
+| `napari_load_image_adata.py` | Image + cell centroids colored by annotation (cell type, Leiden, etc.) |
+
+### Running Napari with Your Data
+
+**Option 1: Launch with script** (recommended)
+
+```bash
+conda activate napari-env
+cd /path/to/BladderDIVE
+
+# Load raw channels + segmentation masks
+napari scripts/napari_load_raw+mask.py
+
+# Or with H&E overlay
+napari scripts/napari_load_raw+mask_HE.py
+```
+
+**Option 2: Paste into Napari console**
+
+1. Launch Napari: `napari`
+2. Open the console: **Window → Console** (or `Ctrl+Shift+C`)
+3. Paste the contents of `napari_load_raw+mask.py` (or the other scripts) and run
+
+**Option 3: Startup script** (Napari 0.6.5+)
+
+In Napari: **Settings → Preferences → Startup script** → set path to `scripts/napari_load_raw+mask.py`. Napari will run this script automatically on launch.
+
+### Customizing Paths
+
+The load scripts use hardcoded paths for the Zarr store and mask directories. Edit the script to match your layout:
+
+- **Zarr store**: `store_path` (e.g. `data/CellDIVE_SLIDE-045.zarr`)
+- **Masks**: `MASK_CONFIGS` list (paths to `.zarr` or `.tif` segmentation outputs)
+
+### Related Documentation
+
+- **[CONTEST_EXPORT.md](CONTEST_EXPORT.md)** — Export composites for publication/contest (uses `napari-env`)
 
 ---
 
@@ -321,12 +423,14 @@ The pipeline generates **cell-level annotations** that complement **pathologist 
 ### Common Issues
 
 **1. Memory Errors**
+
 ```bash
 # Reduce tile size or increase system memory
 # Edit segmentation parameters in config.yaml
 ```
 
 **2. Conda Environment Issues**
+
 ```bash
 # Clean conda cache
 conda clean --all
@@ -337,12 +441,14 @@ conda create -n snakemake_env snakemake mamba -c conda-forge -c bioconda
 ```
 
 **3. StarDist Model Download**
+
 ```bash
 # Manually download StarDist models if needed
 python -c "from stardist.models import StarDist2D; StarDist2D.from_pretrained('2D_versatile_fluo')"
 ```
 
 **4. Pipeline Locks**
+
 ```bash
 # Unlock Snakemake if interrupted
 snakemake --unlock
@@ -360,6 +466,7 @@ snakemake --unlock
 ## 📚 Dependencies
 
 ### Core Tools
+
 - **Snakemake**: Workflow management
 - **StarDist**: Deep learning segmentation
 - **Scanpy**: Single-cell analysis
@@ -367,6 +474,7 @@ snakemake --unlock
 - **QuPath**: Pathology image analysis
 
 ### Key Python Packages
+
 - `numpy`, `scipy`, `pandas`: Data manipulation
 - `scikit-image`, `opencv`: Image processing
 - `matplotlib`, `seaborn`: Visualization
@@ -380,10 +488,10 @@ snakemake --unlock
 If you use BladderDIVE in your research, please cite:
 
 ```bibtex
-@software{bladderdive2025,
+@software{bladderdive2026,
   title={BladderDIVE: Integrated Spatial Proteomics Analysis of Bladder Tissue},
-  author={Your Name},
-  year={2025},
+  author={He Lab},
+  year={2026},
   url={https://github.com/yourusername/BladderDIVE}
 }
 ```
@@ -405,6 +513,7 @@ We welcome contributions! Please:
 3. Submit a pull request
 
 ### Development Setup
+
 ```bash
 git clone https://github.com/yourusername/BladderDIVE.git
 cd BladderDIVE

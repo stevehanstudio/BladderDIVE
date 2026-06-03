@@ -1,0 +1,21 @@
+name: registration
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11  # stainwarpy requires Python 3.11+
+  - numpy
+  - scipy
+  - scikit-image
+  - pandas
+  - tifffile
+  - pillow
+  - openslide-python  # For reading SVS files
+  - openslide  # Core openslide library
+  - pyvips  # For pyramidal OME-TIFF output (QuPath-compatible)
+  - matplotlib
+  - pip
+  - pip:
+    - stainwarpy
+    - zarr
+    - dask
