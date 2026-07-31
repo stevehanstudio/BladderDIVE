@@ -1,0 +1,71 @@
+{
+  "status": "fail",
+  "metrics": {
+    "frac_mask_fg": {
+      "value": 0.18833
+    },
+    "mean_dapi_inside": {
+      "value": 3060.935546875
+    },
+    "mean_dapi_outside": {
+      "value": 762.5419921875
+    },
+    "dapi_in_mask_ratio": {
+      "value": 4.0141206362866795,
+      "warn": 1.5,
+      "fail": 1.1,
+      "direction": "low",
+      "status": "pass"
+    },
+    "frac_fg_below_global_p5": {
+      "value": 0.0,
+      "warn": 0.1,
+      "fail": 0.25,
+      "direction": "high",
+      "status": "pass"
+    },
+    "area_outlier_frac": {
+      "value": 0.0033520301164355307,
+      "warn": 0.05,
+      "fail": 0.15,
+      "direction": "high",
+      "status": "pass"
+    },
+    "doublet_frac": {
+      "value": 0.07313559523372419
+    },
+    "solidity_median": {
+      "value": NaN,
+      "warn": 0.85,
+      "fail": 0.75,
+      "direction": "low",
+      "status": "unknown"
+    },
+    "median_area": {
+      "value": 351.0
+    },
+    "regionprops_skipped": {
+      "value": 1.0
+    },
+    "tile_density_mad_z_max": {
+      "value": 5.663766331658292,
+      "warn": 3.0,
+      "fail": 5.0,
+      "direction": "high",
+      "status": "fail"
+    },
+    "tile_density_outlier_cell_frac": {
+      "value": 0.008733204752453008
+    },
+    "mask_coverage_frac": {
+      "value": 0.18191565275192262,
+      "warn": 0.05,
+      "fail": 0.02,
+      "direction": "low",
+      "status": "pass"
+    },
+    "n_cells_in_adata": {
+      "value": 926006.0
+    }
+  }
+}

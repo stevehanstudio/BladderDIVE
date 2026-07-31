@@ -1,0 +1,19 @@
+{
+  "id": "SLIDE-045_spatial",
+  "section_name": "SLIDE-045 Spatial QC",
+  "description": "spatial QC metrics for SLIDE-045",
+  "plot_type": "generalstats",
+  "data": {
+    "SLIDE-045": {
+      "coverage_frac": 0.8328,
+      "density_cv": 1.1269315059696923,
+      "spatial_outlier_frac": 0.02205,
+      "row_density_cv": 0.30844791878015915,
+      "col_density_cv": 0.926500518293595,
+      "empty_bin_frac_x": 0.0,
+      "empty_bin_frac_y": 0.0,
+      "edge_cell_frac": 0.19148,
+      "edge_center_dapi_ratio": 0.5096165600258643
+    }
+  }
+}

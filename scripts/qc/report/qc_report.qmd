@@ -1,0 +1,198 @@
+---
+title: "CellDIVE QC Report"
+author: "BladderDIVE"
+date: today
+params:
+  qc_dir: "../../../qc"
+  slide_id: "SLIDE-045"
+  config_path: "../../../qc_config.yaml"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    theme: cosmo
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Setup
+
+```{python}
+#| label: setup
+from pathlib import Path
+import json
+import pandas as pd
+from IPython.display import Markdown, display
+
+slide_id = params.slide_id
+qc_root = Path(params.qc_dir)
+slide_dir = qc_root / slide_id
+summary_path = slide_dir / "qc_summary.json"
+
+with open(summary_path) as f:
+    summary = json.load(f)
+
+overall = summary.get("overall_status", "unknown")
+n_cells = summary.get("n_cells", 0)
+n_pass = summary.get("n_cells_qc_pass", 0)
+pct_pass = 100 * n_pass / n_cells if n_cells else 0
+```
+
+## Executive Summary
+
+```{python}
+#| label: exec-summary
+rows = []
+for mod, block in summary.get("modules", {}).items():
+    rows.append({"module": mod, "status": block.get("status", "unknown")})
+status_df = pd.DataFrame(rows)
+display(status_df)
+
+Markdown(f"""
+**Slide:** `{slide_id}`  
+**Overall status:** `{overall}`  
+**Cells:** {n_cells:,} ({n_pass:,} pass QC, {pct_pass:.1f}%)
+""")
+```
+
+## Image-level QC
+
+```{python}
+#| label: image-metrics
+image_path = slide_dir / "image_qc.json"
+if image_path.exists():
+    with open(image_path) as f:
+        image_qc = json.load(f)
+    metrics = image_qc.get("metrics", {})
+    rows = []
+    for k, v in metrics.items():
+        if isinstance(v, dict) and "value" in v:
+            rows.append({
+                "metric": k,
+                "value": v.get("value"),
+                "status": v.get("status", ""),
+            })
+    if rows:
+        display(pd.DataFrame(rows))
+```
+
+```{python}
+#| label: image-figures
+#| fig-cap: Focus and illumination tile maps
+from IPython.display import Image, display
+for fig in ["focus_heatmap.png", "illumination_heatmap.png", "drift_dapi_rounds.png"]:
+    p = slide_dir / "figures" / fig
+    if p.exists():
+        display(Image(str(p)))
+```
+
+## Segmentation QC
+
+```{python}
+#| label: seg-metrics
+seg_path = slide_dir / "segmentation_qc.json"
+if seg_path.exists():
+    with open(seg_path) as f:
+        seg_qc = json.load(f)
+    rows = []
+    for k, v in seg_qc.get("metrics", {}).items():
+        if isinstance(v, dict) and "value" in v:
+            rows.append({"metric": k, "value": v.get("value"), "status": v.get("status", "")})
+    if rows:
+        display(pd.DataFrame(rows))
+```
+
+```{python}
+#| label: seg-figures
+for fig in ["mask_vs_dapi_qc.png", "area_distribution.png"]:
+    p = slide_dir / "figures" / fig
+    if p.exists():
+        display(Image(str(p)))
+```
+
+## Marker QC
+
+```{python}
+#| label: marker-table
+marker_tsv = slide_dir / "marker_qc.tsv"
+if marker_tsv.exists():
+    marker_df = pd.read_csv(marker_tsv, sep="\t")
+    display(marker_df.sort_values("staining_index", ascending=False))
+```
+
+```{python}
+#| label: marker-figures
+for fig in ["marker_staining_index.png", "dapi1_dapi2_scatter.png", "marker_correlation_heatmap.png"]:
+    p = slide_dir / "figures" / fig
+    if p.exists():
+        display(Image(str(p)))
+```
+
+## Spatial QC
+
+```{python}
+#| label: spatial-metrics
+spatial_path = slide_dir / "spatial_qc.json"
+if spatial_path.exists():
+    with open(spatial_path) as f:
+        spatial_qc = json.load(f)
+    rows = []
+    for k, v in spatial_qc.get("metrics", {}).items():
+        if isinstance(v, dict) and "value" in v:
+            rows.append({"metric": k, "value": v.get("value"), "status": v.get("status", "")})
+    if rows:
+        display(pd.DataFrame(rows))
+```
+
+```{python}
+#| label: spatial-figures
+for fig in ["density_map.png", "spatial_outliers.png"]:
+    p = slide_dir / "figures" / fig
+    if p.exists():
+        display(Image(str(p)))
+```
+
+## Batch QC (cohort)
+
+```{python}
+#| label: batch-qc
+cohort_path = qc_root / "aggregate" / "cohort_qc.json"
+if cohort_path.exists():
+    with open(cohort_path) as f:
+        cohort = json.load(f)
+    display(pd.DataFrame([cohort]))
+    status_matrix = qc_root / "aggregate" / "slide_status_matrix.tsv"
+    if status_matrix.exists():
+        display(pd.read_csv(status_matrix, sep="\t"))
+else:
+    Markdown("_Cohort QC not available (single-slide mode)._")
+```
+
+## MultiQC outputs
+
+```{python}
+#| label: multiqc
+mqc_dir = slide_dir / "multiqc"
+if mqc_dir.exists():
+    files = sorted(mqc_dir.glob("*"))
+    for f in files:
+        print(f.name)
+        if f.suffix == ".tsv":
+            display(pd.read_csv(f, sep="\t"))
+```
+
+## Methods and provenance
+
+```{python}
+#| label: provenance
+Markdown(f"""
+- **Schema version:** {summary.get('schema_version')}
+- **Config hash:** `{summary.get('config_hash')}`
+- **Generated at:** {summary.get('generated_at')}
+- **Batch:** {summary.get('batch_id')}
+- **Acquisition date:** {summary.get('acquisition_date')}
+""")
+```

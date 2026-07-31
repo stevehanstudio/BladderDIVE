@@ -1,0 +1,18 @@
+project:
+  type: website
+  output-dir: ../../../qc/report
+
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    theme: cosmo
+    embed-resources: true
+  pdf:
+    toc: true
+
+execute:
+  echo: true
+  warning: false
+  message: false

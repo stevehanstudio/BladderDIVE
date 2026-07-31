@@ -1,0 +1,270 @@
+schema_version: "1.0"
+qc_dir: qc
+tile_size: 16384
+qc_tile_size: 2048
+pyramid_level: 4
+max_pixels: 100000
+max_cells_sample: 100000
+correlation_cells: 20000
+max_bleedthrough_pairs: 8
+max_array_mb: 512
+low_memory: true
+skip_regionprops: true
+min_cell_area: 50
+max_cell_area: 5000
+
+# Primary DAPI rounds in the registered zarr
+dapi_rounds:
+  R01: 0   # DAPI_AF_R01
+  R06: 22  # DAPI_R06
+
+# Fluorophore groups for bleedthrough analysis (channel indices)
+fluorophore_groups:
+  AF488: [1, 5, 9, 13, 16, 19]
+  AF555: [2, 6, 10, 14, 17, 20]
+  AF647: [3, 7, 11, 15, 18, 21]
+  AF750: [4, 8, 12]
+
+# Marker metadata (channel index matches OME zarr order; names match AnnData var)
+markers:
+  DAPI:
+    channel: 0
+    fluorophore: AF
+    round: R01
+    type: nuclear
+    label: DAPI_AF_R01
+  CD45:
+    channel: 1
+    fluorophore: AF488
+    round: R01
+    type: lineage
+  CD3E:
+    channel: 2
+    fluorophore: AF555
+    round: R01
+    type: lineage
+  Ki67:
+    channel: 3
+    fluorophore: AF647
+    round: R01
+    type: functional
+  CD8a:
+    channel: 4
+    fluorophore: AF750
+    round: R01
+    type: lineage
+  VIM:
+    channel: 5
+    fluorophore: AF488
+    round: R02
+    type: stromal
+  CD68:
+    channel: 6
+    fluorophore: AF555
+    round: R02
+    type: lineage
+  HLADR:
+    channel: 7
+    fluorophore: AF647
+    round: R02
+    type: functional
+  CD31:
+    channel: 8
+    fluorophore: AF750
+    round: R02
+    type: lineage
+  ACTA2:
+    channel: 9
+    fluorophore: AF488
+    round: R03
+    type: stromal
+  CD20:
+    channel: 10
+    fluorophore: AF555
+    round: R03
+    type: lineage
+  CD163:
+    channel: 11
+    fluorophore: AF647
+    round: R03
+    type: lineage
+  CD44:
+    channel: 12
+    fluorophore: AF750
+    round: R03
+    type: functional
+  PANCK:
+    channel: 13
+    fluorophore: AF488
+    round: R04
+    type: lineage
+  CD38:
+    channel: 14
+    fluorophore: AF555
+    round: R04
+    type: functional
+  CD11c:
+    channel: 15
+    fluorophore: AF647
+    round: R04
+    type: lineage
+  PDGFRA:
+    channel: 16
+    fluorophore: AF488
+    round: R05
+    type: stromal
+  COL1A1:
+    channel: 17
+    fluorophore: AF555
+    round: R05
+    type: stromal
+  CD14:
+    channel: 18
+    fluorophore: AF647
+    round: R05
+    type: lineage
+  EPCAM:
+    channel: 19
+    fluorophore: AF488
+    round: R06
+    type: lineage
+  CD56:
+    channel: 20
+    fluorophore: AF555
+    round: R06
+    type: lineage
+  CD45RO:
+    channel: 21
+    fluorophore: AF647
+    round: R06
+    type: lineage
+  DAPI2:
+    channel: 22
+    fluorophore: AF
+    round: R06
+    type: nuclear
+    label: DAPI_R06
+
+# Seeded from output/gating_thresholds.csv (positive classification)
+gating_thresholds:
+  CD45: 494.8
+  CD3E: 655.6
+  Ki67: 147.1
+  CD8a: 600.0
+  VIM: 2351.2
+  CD68: 436.0
+  HLADR: 217.2
+  CD31: 80.0
+  ACTA2: 472.2
+  CD20: 300.0
+  CD163: 789.9
+  CD44: 6001.3
+  PANCK: 673.4
+  CD38: 642.5
+  CD11c: 60.0
+  PDGFRA: 132.1
+  COL1A1: 3401.6
+  CD14: 100.0
+  EPCAM: 78.5
+  CD56: 200.0
+  CD45RO: 100.0
+
+thresholds:
+  image:
+    focus_frac_bad:
+      warn: 0.10
+      fail: 0.25
+      direction: high
+    illumination_cv:
+      warn: 0.15
+      fail: 0.30
+      direction: high
+    vignetting_index:
+      warn: 0.80
+      fail: 0.60
+      direction: low
+    max_drift_px:
+      warn: 2.0
+      fail: 5.0
+      direction: high
+    bleedthrough_corr:
+      warn: 0.30
+      fail: 0.50
+      direction: high
+    autofluorescence_corr:
+      warn: 0.30
+      fail: 0.50
+      direction: high
+  segmentation:
+    area_outlier_frac:
+      warn: 0.05
+      fail: 0.15
+      direction: high
+    dapi_in_mask_ratio:
+      warn: 1.5
+      fail: 1.1
+      direction: low
+    frac_fg_below_global_p5:
+      warn: 0.10
+      fail: 0.25
+      direction: high
+    tile_density_mad_z:
+      warn: 3.0
+      fail: 5.0
+      direction: high
+    solidity_median:
+      warn: 0.85
+      fail: 0.75
+      direction: low
+    mask_coverage_frac:
+      warn: 0.05
+      fail: 0.02
+      direction: low
+  marker:
+    staining_index:
+      warn: 2.0
+      fail: 1.0
+      direction: low
+    snr:
+      warn: 2.0
+      fail: 1.2
+      direction: low
+    pct_positive_low:
+      warn: 0.005
+      fail: 0.001
+      direction: low
+    pct_positive_high:
+      warn: 0.60
+      fail: 0.90
+      direction: high
+    dapi_corr:
+      warn: 0.80
+      fail: 0.60
+      direction: low
+  spatial:
+    coverage_frac:
+      warn: 0.70
+      fail: 0.40
+      direction: low
+    density_cv:
+      warn: 0.50
+      fail: 1.00
+      direction: high
+    spatial_outlier_frac:
+      warn: 0.02
+      fail: 0.10
+      direction: high
+  batch:
+    marker_median_cv:
+      warn: 0.30
+      fail: 0.60
+      direction: high
+
+slides:
+  - id: SLIDE-045
+    batch: B01
+    acquisition_date: "2026-01-15"
+    celldive_zarr: data/CellDIVE_SLIDE-045.zarr
+    mask_zarr: output/cellpose_output/cellpose_masks_dapi_only_9tiles.zarr
+    adata_in: output/celldive_protein_matrix.h5ad
+    adata_out: output/celldive_protein_matrix_qc.h5ad

@@ -1,0 +1,44 @@
+{
+  "status": "fail",
+  "metrics": {
+    "coverage_frac": {
+      "value": 0.8328,
+      "warn": 0.7,
+      "fail": 0.4,
+      "direction": "low",
+      "status": "pass"
+    },
+    "density_cv": {
+      "value": 1.1269315059696923,
+      "warn": 0.5,
+      "fail": 1.0,
+      "direction": "high",
+      "status": "fail"
+    },
+    "spatial_outlier_frac": {
+      "value": 0.02205,
+      "warn": 0.02,
+      "fail": 0.1,
+      "direction": "high",
+      "status": "warn"
+    },
+    "row_density_cv": {
+      "value": 0.30844791878015915
+    },
+    "col_density_cv": {
+      "value": 0.926500518293595
+    },
+    "empty_bin_frac_x": {
+      "value": 0.0
+    },
+    "empty_bin_frac_y": {
+      "value": 0.0
+    },
+    "edge_cell_frac": {
+      "value": 0.19148
+    },
+    "edge_center_dapi_ratio": {
+      "value": 0.5096165600258643
+    }
+  }
+}

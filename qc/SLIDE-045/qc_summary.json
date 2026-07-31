@@ -1,0 +1,417 @@
+{
+  "schema_version": "1.0",
+  "slide_id": "SLIDE-045",
+  "batch_id": "B01",
+  "acquisition_date": "2026-01-15",
+  "config_hash": "ea58e60fe5b9",
+  "generated_at": "2026-06-20T02:37:25+00:00",
+  "n_cells": 926006,
+  "n_cells_qc_pass": 854727,
+  "modules": {
+    "image": {
+      "status": "fail",
+      "metrics": {
+        "focus_frac_bad": {
+          "value": 0.16666666666666666,
+          "warn": 0.1,
+          "fail": 0.25,
+          "direction": "high",
+          "status": "warn"
+        },
+        "focus_median_laplacian": {
+          "value": 596109.8590708673
+        },
+        "illumination_cv": {
+          "value": 0.6720084559908901,
+          "warn": 0.15,
+          "fail": 0.3,
+          "direction": "high",
+          "status": "fail"
+        },
+        "vignetting_index": {
+          "value": 0.5075808635422315,
+          "warn": 0.8,
+          "fail": 0.6,
+          "direction": "low",
+          "status": "fail"
+        },
+        "max_drift_px": {
+          "value": 0.0,
+          "warn": 2.0,
+          "fail": 5.0,
+          "direction": "high",
+          "status": "pass"
+        },
+        "drift_dy_px": {
+          "value": 0.0
+        },
+        "drift_dx_px": {
+          "value": 0.0
+        },
+        "phase_corr_error": {
+          "value": 1.0
+        },
+        "bleedthrough_corr": {
+          "value": 0.5204935378955206,
+          "warn": 0.3,
+          "fail": 0.5,
+          "direction": "high",
+          "status": "fail"
+        },
+        "pairs_tested": {
+          "value": 8.0
+        },
+        "autofluorescence_corr": {
+          "value": 0.3718559806524617,
+          "warn": 0.3,
+          "fail": 0.5,
+          "direction": "high",
+          "status": "warn"
+        }
+      }
+    },
+    "segmentation": {
+      "status": "fail",
+      "metrics": {
+        "frac_mask_fg": {
+          "value": 0.18833
+        },
+        "mean_dapi_inside": {
+          "value": 3060.935546875
+        },
+        "mean_dapi_outside": {
+          "value": 762.5419921875
+        },
+        "dapi_in_mask_ratio": {
+          "value": 4.0141206362866795,
+          "warn": 1.5,
+          "fail": 1.1,
+          "direction": "low",
+          "status": "pass"
+        },
+        "frac_fg_below_global_p5": {
+          "value": 0.0,
+          "warn": 0.1,
+          "fail": 0.25,
+          "direction": "high",
+          "status": "pass"
+        },
+        "area_outlier_frac": {
+          "value": 0.0033520301164355307,
+          "warn": 0.05,
+          "fail": 0.15,
+          "direction": "high",
+          "status": "pass"
+        },
+        "doublet_frac": {
+          "value": 0.07313559523372419
+        },
+        "solidity_median": {
+          "value": NaN,
+          "warn": 0.85,
+          "fail": 0.75,
+          "direction": "low",
+          "status": "unknown"
+        },
+        "median_area": {
+          "value": 351.0
+        },
+        "regionprops_skipped": {
+          "value": 1.0
+        },
+        "tile_density_mad_z_max": {
+          "value": 5.663766331658292,
+          "warn": 3.0,
+          "fail": 5.0,
+          "direction": "high",
+          "status": "fail"
+        },
+        "tile_density_outlier_cell_frac": {
+          "value": 0.008733204752453008
+        },
+        "mask_coverage_frac": {
+          "value": 0.18191565275192262,
+          "warn": 0.05,
+          "fail": 0.02,
+          "direction": "low",
+          "status": "pass"
+        },
+        "n_cells_in_adata": {
+          "value": 926006.0
+        }
+      }
+    },
+    "marker": {
+      "status": "fail",
+      "metrics": {
+        "per_marker": {
+          "CD45": {
+            "staining_index": 100.25224126570411,
+            "snr": 18.805067772208083,
+            "pct_positive": 0.88683,
+            "dynamic_range": 2840849304199.2153,
+            "bimodal": 1.0,
+            "background": 6.62294864654541,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "CD3E": {
+            "staining_index": 758.0811182905975,
+            "snr": 71.3170449397414,
+            "pct_positive": 0.82196,
+            "dynamic_range": 15718646865234.371,
+            "bimodal": 0.0,
+            "background": 4.166666507720947,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "Ki67": {
+            "staining_index": 8.1200787795638,
+            "snr": 3.683544843626571,
+            "pct_positive": 0.89974,
+            "dynamic_range": 148.7908987751871,
+            "bimodal": 0.0,
+            "background": 28.61693572998047,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "CD8a": {
+            "staining_index": 213.47255018581257,
+            "snr": 45.81069741330773,
+            "pct_positive": 0.89492,
+            "dynamic_range": 21341.786757119382,
+            "bimodal": 1.0,
+            "background": 8.385640144348145,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "VIM": {
+            "staining_index": 19.9385037772679,
+            "snr": 7.364060300937578,
+            "pct_positive": 0.89889,
+            "dynamic_range": 1009.0867634994465,
+            "bimodal": 1.0,
+            "background": 151.7564239501953,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "CD68": {
+            "staining_index": 4.977847443917989,
+            "snr": 1.9813109887011642,
+            "pct_positive": 0.89265,
+            "dynamic_range": 6149.847630518705,
+            "bimodal": 0.0,
+            "background": 71.15021514892578,
+            "antibody_failed": false,
+            "status": "warn"
+          },
+          "HLADR": {
+            "staining_index": 19.957018494651862,
+            "snr": 2.6949003804441847,
+            "pct_positive": 0.89963,
+            "dynamic_range": 132.62979940479832,
+            "bimodal": 0.0,
+            "background": 82.05352783203125,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "CD31": {
+            "staining_index": 215.9086735893418,
+            "snr": 4.010220048806658,
+            "pct_positive": 0.85631,
+            "dynamic_range": 4271739370117.1436,
+            "bimodal": 1.0,
+            "background": 2.0,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "ACTA2": {
+            "staining_index": 9.6093492107717,
+            "snr": 2.4363871318690573,
+            "pct_positive": 0.89766,
+            "dynamic_range": 311.61008335707095,
+            "bimodal": 1.0,
+            "background": 100.07183074951172,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "CD20": {
+            "staining_index": 5.637804445836213,
+            "snr": 1.2163653438645083,
+            "pct_positive": 0.89926,
+            "dynamic_range": 93.14573037720406,
+            "bimodal": 0.0,
+            "background": 113.85623931884766,
+            "antibody_failed": true,
+            "status": "fail"
+          },
+          "CD163": {
+            "staining_index": 155.02333280885549,
+            "snr": 13.49313116039466,
+            "pct_positive": 0.89693,
+            "dynamic_range": 17080.22584308775,
+            "bimodal": 1.0,
+            "background": 8.537176132202148,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "CD44": {
+            "staining_index": 10.895651843580731,
+            "snr": 4.942625087669393,
+            "pct_positive": 0.89999,
+            "dynamic_range": 766.1885285264441,
+            "bimodal": 0.0,
+            "background": 399.64764404296875,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "PANCK": {
+            "staining_index": 6.406046410469967,
+            "snr": 1.9152541663741085,
+            "pct_positive": 0.89741,
+            "dynamic_range": 1514.5382560283213,
+            "bimodal": 0.0,
+            "background": 100.31954193115234,
+            "antibody_failed": false,
+            "status": "warn"
+          },
+          "CD38": {
+            "staining_index": 7.872329572037717,
+            "snr": 1.4100507239516955,
+            "pct_positive": 0.88996,
+            "dynamic_range": 7314238276367.17,
+            "bimodal": 0.0,
+            "background": 90.86872863769531,
+            "antibody_failed": true,
+            "status": "fail"
+          },
+          "CD11c": {
+            "staining_index": 34.48912369417496,
+            "snr": 2.8159665049283893,
+            "pct_positive": 0.84862,
+            "dynamic_range": 509796930541.9915,
+            "bimodal": 1.0,
+            "background": 1.9158563613891602,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "PDGFRA": {
+            "staining_index": 1.4576644974041892,
+            "snr": 1.5114317653918907,
+            "pct_positive": 0.89532,
+            "dynamic_range": 70.90240046057687,
+            "bimodal": 0.0,
+            "background": 74.71781158447266,
+            "antibody_failed": false,
+            "status": "warn"
+          },
+          "COL1A1": {
+            "staining_index": 16.545165712200895,
+            "snr": 4.395710950394211,
+            "pct_positive": 0.90053,
+            "dynamic_range": 138.55489520330664,
+            "bimodal": 0.0,
+            "background": 328.3622131347656,
+            "antibody_failed": true,
+            "status": "fail"
+          },
+          "CD14": {
+            "staining_index": 224.14506853255028,
+            "snr": 34.47881750187582,
+            "pct_positive": 0.88755,
+            "dynamic_range": 6859192958984.346,
+            "bimodal": 1.0,
+            "background": 4.018355369567871,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "EPCAM": {
+            "staining_index": 4.192586513122613,
+            "snr": 2.86660673736349,
+            "pct_positive": 0.89133,
+            "dynamic_range": 95247.89620630023,
+            "bimodal": 0.0,
+            "background": 20.922883987426758,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "CD56": {
+            "staining_index": 4.0571595271766006,
+            "snr": 2.0803109546622984,
+            "pct_positive": 0.88728,
+            "dynamic_range": 785120676269.5302,
+            "bimodal": 0.0,
+            "background": 61.00773620605469,
+            "antibody_failed": false,
+            "status": "pass"
+          },
+          "CD45RO": {
+            "staining_index": 53.567051184983846,
+            "snr": 6.217529367587708,
+            "pct_positive": 0.88204,
+            "dynamic_range": 672287153320.3105,
+            "bimodal": 1.0,
+            "background": 2.966809034347534,
+            "antibody_failed": false,
+            "status": "pass"
+          }
+        },
+        "dapi_corr": {
+          "value": 0.6858759621444194,
+          "warn": 0.8,
+          "fail": 0.6,
+          "direction": "low",
+          "status": "warn"
+        },
+        "max_abs_correlation": {
+          "value": 0.8181822327454735
+        }
+      }
+    },
+    "spatial": {
+      "status": "fail",
+      "metrics": {
+        "coverage_frac": {
+          "value": 0.8328,
+          "warn": 0.7,
+          "fail": 0.4,
+          "direction": "low",
+          "status": "pass"
+        },
+        "density_cv": {
+          "value": 1.1269315059696923,
+          "warn": 0.5,
+          "fail": 1.0,
+          "direction": "high",
+          "status": "fail"
+        },
+        "spatial_outlier_frac": {
+          "value": 0.02205,
+          "warn": 0.02,
+          "fail": 0.1,
+          "direction": "high",
+          "status": "warn"
+        },
+        "row_density_cv": {
+          "value": 0.30844791878015915
+        },
+        "col_density_cv": {
+          "value": 0.926500518293595
+        },
+        "empty_bin_frac_x": {
+          "value": 0.0
+        },
+        "empty_bin_frac_y": {
+          "value": 0.0
+        },
+        "edge_cell_frac": {
+          "value": 0.19148
+        },
+        "edge_center_dapi_ratio": {
+          "value": 0.5096165600258643
+        }
+      }
+    }
+  },
+  "overall_status": "fail"
+}

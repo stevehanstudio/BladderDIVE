@@ -1,0 +1,19 @@
+{
+  "id": "SLIDE-045_general",
+  "section_name": "SLIDE-045 QC Summary",
+  "description": "CellDIVE per-slide QC summary",
+  "plot_type": "generalstats",
+  "pconfig": {
+    "id": "SLIDE-045_general",
+    "title": "SLIDE-045 General Stats",
+    "format": "{value:.3f}",
+    "ylab": "Value"
+  },
+  "data": {
+    "SLIDE-045": {
+      "n_cells": 926006,
+      "n_cells_qc_pass": 854727,
+      "overall_status": "fail"
+    }
+  }
+}

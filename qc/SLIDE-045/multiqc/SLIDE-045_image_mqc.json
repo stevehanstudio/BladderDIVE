@@ -1,0 +1,21 @@
+{
+  "id": "SLIDE-045_image",
+  "section_name": "SLIDE-045 Image QC",
+  "description": "image QC metrics for SLIDE-045",
+  "plot_type": "generalstats",
+  "data": {
+    "SLIDE-045": {
+      "focus_frac_bad": 0.16666666666666666,
+      "focus_median_laplacian": 596109.8590708673,
+      "illumination_cv": 0.6720084559908901,
+      "vignetting_index": 0.5075808635422315,
+      "max_drift_px": 0.0,
+      "drift_dy_px": 0.0,
+      "drift_dx_px": 0.0,
+      "phase_corr_error": 1.0,
+      "bleedthrough_corr": 0.5204935378955206,
+      "pairs_tested": 8.0,
+      "autofluorescence_corr": 0.3718559806524617
+    }
+  }
+}
