@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Lightweight alternative to the pre-commit framework.
+# Enable once per clone:
+#   git config core.hooksPath .githooks
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+FIX="$ROOT/scripts/fix_notebook_nbformat.py"
+
+mapfile -t STAGED < <(git diff --cached --name-only --diff-filter=ACM | grep -E '\.ipynb$' || true)
+if [[ ${#STAGED[@]} -eq 0 ]]; then
+  exit 0
+fi
+
+python "$FIX" "${STAGED[@]}"
+git add -- "${STAGED[@]}"

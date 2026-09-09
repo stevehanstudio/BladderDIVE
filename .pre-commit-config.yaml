@@ -1,0 +1,14 @@
+# Install once per clone:
+#   pip install pre-commit && pre-commit install
+#
+# Then every `git commit` that stages *.ipynb will auto-repair GitHub/nbformat
+# output fields (metadata / stream name) and re-stage the files.
+repos:
+  - repo: local
+    hooks:
+      - id: fix-notebook-nbformat
+        name: fix notebook nbformat (GitHub render)
+        entry: python scripts/fix_notebook_nbformat.py
+        language: system
+        types: [jupyter]
+        pass_filenames: true
