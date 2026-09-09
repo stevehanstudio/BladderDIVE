@@ -131,6 +131,7 @@ def _load_cells_labels_layer(
     color_mapping: dict[str, str] | None = None,
     background_color: tuple[float, float, float, float] = (0, 0, 0, 1),
     layer_name: str | None = None,
+    contour_width: int | float = 0,
 ) -> None:
     """
     Create Labels layer(s) with cells filled by cell-type color.
@@ -138,6 +139,8 @@ def _load_cells_labels_layer(
     per_type: If True, one layer per cell type (toggle each on/off).
               If False, one composite layer with all types.
     scale_level: 0=full res (memory heavy), 2=4x down (default), etc.
+    contour_width: If > 0, draw per-cell outlines instead of filled cells and
+              force one layer per category (multiscale, like the mask layer).
     """
     mask_group = zarr.open(str(mask_path), mode="r")
     level_keys = sorted([k for k in mask_group.keys() if str(k).isdigit()], key=int)
@@ -155,13 +158,56 @@ def _load_cells_labels_layer(
         if scale_level < len(datasets):
             scale_xy = tuple(datasets[scale_level]["coordinateTransformations"][0]["scale"])
 
-    cell_to_type = dict(zip(_cell_ids_for_mask(adata), adata.obs[color_column].astype(str)))
-    unique = pd.unique(adata.obs[color_column].astype(str))
+    cell_ids_all = _cell_ids_for_mask(adata)
+    cats_all = adata.obs[color_column].astype(str).to_numpy()
+    # Label 0 is the Cellpose background (~92% of the slide), not a cell. It carries a
+    # real category in obs, so including it would paint the whole slide.
+    is_cell = cell_ids_all >= 1
+    cell_to_type = dict(zip(cell_ids_all[is_cell], cats_all[is_cell]))
+    # Category order comes from the full column so colors match the points layers.
+    unique = pd.unique(cats_all)
     if color_mapping:
         colors = [color_mapping.get(str(cat), "#808080") for cat in unique]
     else:
         colors = _qualitative_colors(len(unique))
     max_label = int(mask_da.max().compute())
+    if cell_ids_all.size:
+        max_label = max(max_label, int(cell_ids_all.max()))
+
+    if contour_width and contour_width > 0:
+        # Outline mode. Each cell keeps its own label ID so two touching cells in the
+        # same category stay separate regions; a category-valued image would merge them
+        # and contour would trace the merged blob instead of the individual cells.
+        type_to_idx = {t: i + 1 for i, t in enumerate(unique)}
+        cluster_of = np.zeros(max_label + 1, dtype=np.uint16)
+        for cid, ct in cell_to_type.items():
+            if 1 <= cid <= max_label:
+                cluster_of[cid] = type_to_idx.get(ct, 0)
+
+        def outline_block(block, want, table=cluster_of, mx=max_label):
+            b = np.clip(block, 0, mx)
+            return np.where(table[b] == want, b, 0).astype(np.uint32)
+
+        n_layers = 0
+        for i, cat in enumerate(unique):
+            want = type_to_idx[cat]
+            if not bool(np.any(cluster_of == want)):
+                continue
+            data = [
+                da.map_blocks(outline_block, da.from_zarr(mask_group[k]), want=want, dtype=np.uint32)
+                for k in level_keys
+            ]
+            layer = viewer.add_labels(data, name=f"{cat} (outline)", multiscale=True, opacity=0.9)
+            layer.contour = contour_width
+            if DirectLabelColormap is not None:
+                layer.colormap = DirectLabelColormap(color_dict={None: _hex_to_rgba(colors[i])})
+            n_layers += 1
+
+        print(
+            f"Loaded {n_layers} {color_column} outline layers "
+            f"(contour={contour_width}, multiscale pyramid)"
+        )
+        return
 
     if per_type:
         # One Labels layer per cell type — each toggleable
@@ -176,7 +222,7 @@ def _load_cells_labels_layer(
                 continue
             mapping = np.zeros(max_label + 1, dtype=np.uint8)
             for cid in cell_ids:
-                if 0 <= cid <= max_label:
+                if 1 <= cid <= max_label:
                     mapping[cid] = 1
 
             def remap_block(block, m=mapping):
@@ -197,7 +243,7 @@ def _load_cells_labels_layer(
         type_to_idx = {t: i + 1 for i, t in enumerate(unique)}
         mapping = np.zeros(max_label + 1, dtype=np.uint16)
         for cid, ct in cell_to_type.items():
-            if 0 <= cid <= max_label:
+            if 1 <= cid <= max_label:
                 mapping[cid] = type_to_idx.get(ct, 0)
 
         def remap_block(block):
@@ -269,6 +315,7 @@ def open_napari_with_adata(
     color_mapping: dict[str, str] | None = None,
     cells_background_color: tuple[float, float, float, float] = (0, 0, 0, 1),
     cells_layer_name: str | None = None,
+    cells_contour_width: int | float = 0,
 ) -> napari.Viewer:
     """
     Open Napari with CellDIVE image and cell annotations.
@@ -309,6 +356,9 @@ def open_napari_with_adata(
         RGBA for non-cell areas (default (0,0,0,1) = black).
     cells_layer_name : str, optional
         Custom name for the cells Labels layer (e.g. "Specks / noise (by dominant channel)").
+    cells_contour_width : int | float
+        0 (default) fills the cells. > 0 draws per-cell outlines of that width and
+        gives every category its own toggleable layer (overrides cells_per_type).
 
     Returns
     -------
@@ -357,6 +407,7 @@ def open_napari_with_adata(
             per_type=cells_per_type, color_mapping=color_mapping,
             background_color=cells_background_color,
             layer_name=cells_layer_name,
+            contour_width=cells_contour_width,
         )
 
     if display_mode in ("points", "both"):
@@ -403,6 +454,12 @@ def main():
     parser.add_argument("--mode", choices=["points", "cells", "both"], default="both", help="Display mode")
     parser.add_argument("--cells-per-type", action="store_true", help="One Labels layer per cell type")
     parser.add_argument("--no-mask-layer", action="store_true", help="Do not add DAPI mask as a layer")
+    parser.add_argument(
+        "--contour-width",
+        type=float,
+        default=0,
+        help="Outline cells instead of filling them (one layer per category); 0 = filled",
+    )
     args = parser.parse_args()
 
     root = _get_project_root()
@@ -424,6 +481,7 @@ def main():
         display_mode=args.mode,
         cells_per_type=args.cells_per_type,
         add_mask_layer=not args.no_mask_layer,
+        cells_contour_width=args.contour_width,
     )
     napari.run()
 

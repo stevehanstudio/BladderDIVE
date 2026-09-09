@@ -1,0 +1,36 @@
+# Dockerfile for InstanSeg with NVIDIA PyTorch
+# Optimized for GB10 GPU (ARM64 / Grace Blackwell, sm_121)
+#
+# Mirrors Dockerfile.cellpose. The NGC base already ships a PyTorch built for sm_121;
+# pip must not silently replace it with a generic wheel that lacks Blackwell kernels,
+# so torch is pinned to the preinstalled version via a constraints file.
+
+FROM nvcr.io/nvidia/pytorch:26.01-py3
+
+RUN python -c "import torch; print(torch.__version__)" > /tmp/torch_version.txt && \
+    echo "torch==$(cat /tmp/torch_version.txt)" > /opt/torch-constraint.txt && \
+    cat /opt/torch-constraint.txt
+
+RUN pip install --no-cache-dir -c /opt/torch-constraint.txt \
+    instanseg-torch \
+    tifffile \
+    zarr \
+    imagecodecs \
+    psutil \
+    tqdm
+
+# Fail the build early if the NGC torch was clobbered or CUDA support was lost.
+RUN python -c "\
+import torch, instanseg; \
+print('torch', torch.__version__, 'cuda', torch.version.cuda); \
+assert torch.version.cuda is not None, 'CUDA-less torch wheel replaced the NGC build'; \
+print('instanseg', instanseg.__version__ if hasattr(instanseg,'__version__') else 'ok')"
+
+# InstanSeg downloads pretrained weights (bioimage.io) on first use; give it a stable,
+# mountable location so repeated container runs do not re-download.
+ENV INSTANSEG_BIOIMAGEIO_PATH=/workspace/.instanseg_models
+ENV TORCH_HOME=/workspace/.torch
+
+WORKDIR /workspace
+
+CMD ["bash"]
