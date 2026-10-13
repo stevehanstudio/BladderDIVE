@@ -93,6 +93,9 @@ output/
 *.loom
 
 # QuPath files
+# *.qpdata is a saved image (File > Save), not a project.
+# *.qpdata/ is a project image-data directory. Neither should be committed.
+*.qpdata
 *.qpdata/
 *.qpproj
 qupath_annotations.geojson

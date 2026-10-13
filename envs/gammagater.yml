@@ -1,0 +1,29 @@
+# R environment for GammaGateR threshold fitting.
+# Create with:  conda env create -f envs/gammagater.yml
+# Then install the two GitHub packages (see the notebook). Do not install
+# these into napari-env: GammaGateR pulls its own R library stack.
+name: gammagater
+channels:
+  - conda-forge
+dependencies:
+  - r-base=4.4
+  - r-remotes
+  - r-data.table
+  - r-jsonlite
+  - r-mixtools
+  - r-ggplot2
+  - r-hrbrthemes
+  - r-rlang
+  - r-gridextra
+  - r-patchwork
+  - r-reactable
+  - r-plotly
+  - r-reshape2
+  - r-ggpubr
+  - r-rmdformats
+  # fossil has no linux-aarch64 conda build (linux-64 / osx-64 / win-64 only).
+  # Its compiled dependencies do. fossil and shapefiles are pure R and are
+  # installed from CRAN after the env exists; see the notebook.
+  - r-sp
+  - r-maps
+  - r-foreign
